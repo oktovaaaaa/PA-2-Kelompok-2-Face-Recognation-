@@ -1,0 +1,111 @@
+// lib/app.dart
+
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import 'core/providers/auth_provider.dart';
+import 'core/providers/session_provider.dart';
+import 'features/admin/presentation/screens/splash_gate.dart';
+import 'features/admin/presentation/screens/login_screen.dart' as features_login;
+
+class EmployeeSystemApp extends StatelessWidget {
+  const EmployeeSystemApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: (_) => _handleUserInteraction(context),
+      onPointerMove: (_) => _handleUserInteraction(context),
+      onPointerUp: (_) => _handleUserInteraction(context),
+      child: const _LifecycleWatcher(
+        child: _AppContent(),
+      ),
+    );
+  }
+
+  void _handleUserInteraction(BuildContext context) {
+    try {
+      final sessionProvider = Provider.of<SessionProvider>(context, listen: false);
+      if (Provider.of<AuthProvider>(context, listen: false).isAuthenticated) {
+        sessionProvider.resetTimer();
+      }
+    } catch (_) {}
+  }
+}
+
+class _AppContent extends StatelessWidget {
+  const _AppContent();
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<AuthProvider>(
+        builder: (context, auth, child) {
+          return MaterialApp(
+            title: 'Employee System',
+            debugShowCheckedModeBanner: false,
+            theme: ThemeData(
+              colorSchemeSeed: const Color(0xFF4D64F5),
+              useMaterial3: true,
+              scaffoldBackgroundColor: Colors.white,
+              appBarTheme: const AppBarTheme(
+                backgroundColor: Colors.white,
+                foregroundColor: Colors.black87,
+                elevation: 0,
+                centerTitle: true,
+              ),
+            ),
+            builder: (context, child) {
+              return Stack(
+                children: [
+                  if (child != null) child,
+                  if (auth.isSessionLocked)
+                    Positioned.fill(
+                      child: Navigator(
+                        onGenerateRoute: (_) => MaterialPageRoute(
+                          builder: (context) => const features_login.LoginScreen(pinOnlyMode: true),
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
+            home: const SplashGate(),
+          );
+        },
+      );
+  }
+}
+
+class _LifecycleWatcher extends StatefulWidget {
+  final Widget child;
+  const _LifecycleWatcher({required this.child});
+
+  @override
+  State<_LifecycleWatcher> createState() => _LifecycleWatcherState();
+}
+
+class _LifecycleWatcherState extends State<_LifecycleWatcher> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final sessionProvider = Provider.of<SessionProvider>(context, listen: false);
+    sessionProvider.handleAppLifecycleState(state);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return widget.child;
+  }
+}

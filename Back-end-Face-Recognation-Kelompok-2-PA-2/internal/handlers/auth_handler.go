@@ -1,0 +1,309 @@
+// internal/handlers/auth_handler.go
+
+package handlers
+
+import (
+	"employee-system/internal/database"
+	"employee-system/internal/models"
+	"employee-system/internal/services"
+	"employee-system/internal/utils"
+
+	"github.com/gin-gonic/gin"
+)
+
+func RegisterAdmin(c *gin.Context) {
+
+	var body struct {
+		Name       string
+		Email      string
+		Password   string
+		Pin        string
+		Phone      string
+		BirthPlace string
+		BirthDate  string
+		Address    string
+
+		CompanyName    string
+		CompanyAddress string
+		CompanyEmail   string
+		CompanyPhone   string
+
+		GoogleIDToken string
+	}
+
+	if err := c.ShouldBindJSON(&body); err != nil {
+
+		utils.Error(c, "Data tidak valid")
+		return
+	}
+
+	user := models.User{
+		Name:       body.Name,
+		Email:      body.Email,
+		Password:   body.Password,
+		Pin:        body.Pin,
+		Phone:      body.Phone,
+		BirthPlace: body.BirthPlace,
+		BirthDate:  body.BirthDate,
+		Address:    body.Address,
+	}
+
+	if body.GoogleIDToken != "" {
+		payload, err := services.VerifyGoogleToken(body.GoogleIDToken)
+		if err == nil {
+			user.Email = payload.Claims["email"].(string)
+			user.GoogleID = payload.Subject
+		} else {
+			utils.Error(c, "Token Google tidak valid: "+err.Error())
+			return
+		}
+	}
+
+	company := models.Company{
+		Name:    body.CompanyName,
+		Address: body.CompanyAddress,
+		Email:   body.CompanyEmail,
+		Phone:   body.CompanyPhone,
+	}
+
+	err := services.RegisterAdmin(user, company)
+
+	if err != nil {
+
+		utils.Error(c, err.Error())
+		return
+	}
+
+	utils.Success(c, "Registrasi admin berhasil", nil)
+}
+
+func SendOTP(c *gin.Context) {
+
+	var body struct {
+		Email string
+	}
+
+	if err := c.ShouldBindJSON(&body); err != nil {
+
+		utils.Error(c, "Email tidak valid")
+		return
+	}
+
+	code, err := services.GenerateOTP(body.Email)
+
+	if err != nil {
+
+		utils.Error(c, "Gagal membuat OTP")
+		return
+	}
+
+	services.SendOTPEmail(body.Email, code)
+
+	utils.Success(c, "OTP berhasil dikirim", nil)
+}
+
+func VerifyOTP(c *gin.Context) {
+
+	var body struct {
+		Email string
+		Code  string
+	}
+
+	if err := c.ShouldBindJSON(&body); err != nil {
+
+		utils.Error(c, "Data tidak valid")
+		return
+	}
+
+	err := services.VerifyOTP(body.Email, body.Code)
+
+	if err != nil {
+
+		utils.Error(c, err.Error())
+		return
+	}
+
+	utils.Success(c, "OTP valid", nil)
+}
+
+func Login(c *gin.Context) {
+
+	var body struct {
+		Email    string
+		Password string
+	}
+
+	if err := c.ShouldBindJSON(&body); err != nil {
+		utils.Error(c, "Data tidak valid")
+		return
+	}
+
+	err := services.Login(body.Email, body.Password)
+
+	if err != nil {
+
+		utils.Error(c, err.Error())
+		return
+	}
+
+	var user models.User
+	database.DB.Where("email = ?", body.Email).First(&user)
+
+	code, err := services.GenerateLoginOTP(body.Email)
+
+	if err != nil {
+
+		utils.Error(c, "Gagal membuat OTP")
+		return
+	}
+
+	err = services.SendOTPEmail(body.Email, code)
+
+	if err != nil {
+
+		utils.Error(c, "Gagal mengirim OTP")
+		return
+	}
+
+	utils.Success(c, "OTP login dikirim", nil)
+}
+
+func VerifyLoginOTP(c *gin.Context) {
+
+	var body struct {
+		Email    string
+		Code     string
+		DeviceID string
+	}
+
+	if err := c.ShouldBindJSON(&body); err != nil {
+
+		utils.Error(c, "Data tidak valid")
+		return
+	}
+
+	err := services.VerifyOTP(body.Email, body.Code)
+
+	if err != nil {
+
+		utils.Error(c, err.Error())
+		return
+	}
+
+	var user models.User
+	database.DB.Where("email = ?", body.Email).First(&user)
+
+	if user.Status == "PENDING" {
+		utils.Error(c, "ACCOUNT_PENDING")
+		return
+	}
+	if user.Status == "REJECTED" {
+		utils.Error(c, "ACCOUNT_REJECTED")
+		return
+	}
+
+	if user.DeviceID != "" && user.DeviceID != body.DeviceID {
+		utils.Error(c, "ACCOUNT_ALREADY_ACTIVE_ON_ANOTHER_DEVICE")
+		return
+	}
+
+	if user.DeviceID == "" {
+		user.DeviceID = body.DeviceID
+		database.DB.Save(&user)
+	}
+
+	token, _ := services.GenerateToken(user.ID)
+
+	utils.Success(c, "Login berhasil", gin.H{
+		"token":     token,
+		"userId":    user.ID,
+		"email":     user.Email,
+		"role":      user.Role,
+		"companyId": user.CompanyID,
+	})
+}
+
+func GoogleLogin(c *gin.Context) {
+
+	var body struct {
+		IDToken string `json:"id_token"`
+	}
+
+	if err := c.ShouldBindJSON(&body); err != nil {
+
+		utils.Error(c, "Token tidak valid")
+		return
+	}
+
+	payload, err := services.VerifyGoogleToken(body.IDToken)
+
+	if err != nil {
+		utils.Error(c, "Token Google tidak valid: "+err.Error())
+		return
+	}
+
+	email := payload.Claims["email"].(string)
+
+	var user models.User
+	err = database.DB.Where("email = ?", email).First(&user).Error
+
+	if err != nil {
+		utils.Error(c, "GOOGLE_ACCOUNT_NOT_REGISTERED")
+		return
+	}
+
+	if user.Status == "PENDING" {
+		utils.Error(c, "ACCOUNT_PENDING")
+		return
+	}
+	if user.Status == "REJECTED" {
+		utils.Error(c, "ACCOUNT_REJECTED")
+		return
+	}
+
+	code, err := services.GenerateLoginOTP(email)
+
+	if err != nil {
+		utils.Error(c, "Gagal membuat OTP")
+		return
+	}
+
+	err = services.SendOTPEmail(email, code)
+
+	if err != nil {
+		utils.Error(c, "Gagal mengirim OTP")
+		return
+	}
+
+	utils.Success(c, "OTP login dikirim", nil)
+}
+
+// internal/handlers/auth_handler.go
+
+func LoginPin(c *gin.Context) {
+
+	var body struct {
+		UserID string `json:"userID"`
+		Pin    string `json:"pin"`
+	}
+
+	if err := c.ShouldBindJSON(&body); err != nil {
+
+		utils.Error(c, "Data tidak valid")
+		return
+	}
+
+	user, err := services.LoginWithPin(body.UserID, body.Pin)
+
+	if err != nil {
+
+		utils.Error(c, err.Error())
+		return
+	}
+
+	token, _ := services.GenerateToken(user.ID)
+
+	utils.Success(c, "Login berhasil", gin.H{
+		"token": token,
+	})
+}

@@ -1,0 +1,31 @@
+name: front_end
+description: A new Flutter project
+publish_to: 'none'
+
+environment:
+  sdk: ^3.11.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  http: ^1.2.2
+  shared_preferences: ^2.3.2
+  provider: ^6.1.2
+  mobile_scanner: ^6.0.0
+  local_auth: ^2.3.0
+  device_info_plus: ^11.0.0
+  google_sign_in: ^6.2.1
+  qr_flutter: ^4.1.0
+  path_provider: ^2.1.4
+  permission_handler: ^11.3.1
+  image_gallery_saver_plus: ^4.0.1
+  mask_text_input_formatter: ^2.9.0
+  pinput: ^6.0.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true

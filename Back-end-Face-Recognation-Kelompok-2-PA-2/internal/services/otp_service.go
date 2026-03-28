@@ -1,0 +1,61 @@
+// internal / services otp+_service.go
+
+package services
+
+import (
+	"employee-system/internal/database"
+	"employee-system/internal/models"
+	"fmt"
+	"math/rand"
+	"time"
+
+	"github.com/google/uuid"
+)
+
+func GenerateOTP(email string) (string, error) {
+
+	var lastOtp models.OTP
+	database.DB.Where("email = ? AND created_at > ?", email, time.Now().Add(-60*time.Second)).Order("created_at desc").First(&lastOtp)
+	if lastOtp.ID != "" {
+		return "", fmt.Errorf("Harap tunggu 60 detik sebelum meminta OTP baru")
+	}
+
+	code := fmt.Sprintf("%06d", rand.Intn(999999))
+
+	otp := models.OTP{
+		ID:        uuid.New().String(),
+		Email:     email,
+		Code:      code,
+		Used:      false,
+		ExpiresAt: time.Now().Add(5 * time.Minute),
+	}
+
+	err := database.DB.Create(&otp).Error
+
+	return code, err
+}
+
+func VerifyOTP(email string, code string) error {
+
+	var otp models.OTP
+
+	err := database.DB.Where(
+		"email = ? AND code = ? AND used = false",
+		email,
+		code,
+	).First(&otp).Error
+
+	if err != nil {
+		return fmt.Errorf("INVALID_OTP")
+	}
+
+	if time.Now().After(otp.ExpiresAt) {
+		return fmt.Errorf("OTP_EXPIRED")
+	}
+
+	otp.Used = true
+
+	database.DB.Save(&otp)
+
+	return nil
+}
