@@ -4,6 +4,7 @@ import '../../../../core/providers/auth_provider.dart';
 import '../../../../core/storage/session_storage.dart';
 import 'admin_dashboard_screen.dart';
 import '../../../auth/presentation/screens/landing_screen.dart';
+import '../../../employee/presentation/screens/employee_dashboard_screen.dart';
 import 'login_screen.dart';
 
 class SplashGate extends StatefulWidget {
@@ -29,11 +30,16 @@ class _SplashGateState extends State<SplashGate> {
 
     if (token != null && token.isNotEmpty) {
       if (mounted) {
-        Provider.of<AuthProvider>(context, listen: false).setAuthenticated(true);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) Provider.of<AuthProvider>(context, listen: false).setAuthenticated(true);
+        });
       }
-      if (role == 'ADMIN') {
+      if (role == 'ADMIN' || role == 'admin') {
         _target = const AdminDashboardScreen();
+      } else if (role == 'employee' || role == 'EMPLOYEE') {
+        _target = const EmployeeDashboardScreen();
       } else {
+        // Fallback: PIN re-auth jika role tidak dikenal
         _target = const LoginScreen(pinOnlyMode: true);
       }
     } else {
@@ -52,4 +58,4 @@ class _SplashGateState extends State<SplashGate> {
     }
     return _target;
   }
-}
+}

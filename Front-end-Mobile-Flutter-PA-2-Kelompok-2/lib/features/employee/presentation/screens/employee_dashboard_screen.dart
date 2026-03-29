@@ -1,30 +1,28 @@
-// lib/features/admin/presentation/screens/admin_dashboard_screen.dart
+// lib/features/employee/presentation/screens/employee_dashboard_screen.dart
 
 import 'package:flutter/material.dart';
 import '../../../../core/storage/session_storage.dart';
 import '../../../auth/presentation/screens/landing_screen.dart';
-import 'tabs/admin_home_tab.dart';
-import 'tabs/admin_leave_tab.dart';
-import 'tabs/admin_position_tab.dart';
-import 'tabs/admin_employee_tab.dart';
-import 'tabs/admin_profile_tab.dart';
+import 'tabs/employee_attendance_tab.dart';
+import 'tabs/employee_history_tab.dart';
+import 'tabs/employee_leave_tab.dart';
+import 'tabs/employee_profile_tab.dart';
 
-class AdminDashboardScreen extends StatefulWidget {
-  const AdminDashboardScreen({super.key});
+class EmployeeDashboardScreen extends StatefulWidget {
+  const EmployeeDashboardScreen({super.key});
 
   @override
-  State<AdminDashboardScreen> createState() => _AdminDashboardScreenState();
+  State<EmployeeDashboardScreen> createState() => _EmployeeDashboardScreenState();
 }
 
-class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
+class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
   int _currentIndex = 0;
 
   final List<Widget> _tabs = const [
-    AdminHomeTab(),
-    AdminLeaveTab(),
-    AdminPositionTab(),
-    AdminEmployeeTab(),
-    AdminProfileTab(),
+    EmployeeAttendanceTab(),
+    EmployeeHistoryTab(),
+    EmployeeLeaveTab(),
+    EmployeeProfileTab(),
   ];
 
   Future<void> _logout() async {
@@ -33,25 +31,17 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text('Keluar', style: TextStyle(fontWeight: FontWeight.bold)),
-        content: const Text('Apakah Anda yakin ingin keluar dari aplikasi?'),
+        content: const Text('Apakah Anda yakin ingin keluar?'),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Batal'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Batal')),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red.shade600,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
             onPressed: () => Navigator.pop(context, true),
             child: const Text('Keluar'),
           ),
         ],
       ),
     );
-
     if (act != true) return;
     await SessionStorage.clear();
     if (!mounted) return;
@@ -64,12 +54,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final labels = ['Beranda', 'Perizinan', 'Jabatan', 'Karyawan', 'Profil'];
+    final labels = ['Kehadiran', 'Riwayat', 'Izin', 'Profil'];
     final icons = [
-      Icons.home_rounded,
-      Icons.assignment_rounded,
-      Icons.work_rounded,
-      Icons.people_rounded,
+      Icons.fingerprint_rounded,
+      Icons.history_rounded,
+      Icons.assignment_late_rounded,
       Icons.person_rounded,
     ];
 
@@ -79,31 +68,24 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           labels[_currentIndex],
           style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 20),
         ),
-        actions: [
-          IconButton(
-            onPressed: _logout,
-            icon: const Icon(Icons.logout_rounded),
-            tooltip: 'Keluar',
-          ),
-        ],
-        backgroundColor: const Color(0xFF4D64F5),
+        backgroundColor: const Color(0xFF2E7D32),
         foregroundColor: Colors.white,
         elevation: 0,
+        actions: [
+          IconButton(onPressed: _logout, icon: const Icon(Icons.logout_rounded), tooltip: 'Keluar'),
+        ],
       ),
-      body: IndexedStack(
-        index: _currentIndex,
-        children: _tabs,
-      ),
+      body: IndexedStack(index: _currentIndex, children: _tabs),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
         onDestinationSelected: (i) => setState(() => _currentIndex = i),
         backgroundColor: Colors.white,
-        indicatorColor: const Color(0xFF4D64F5).withAlpha(30),
+        indicatorColor: const Color(0xFF2E7D32).withAlpha(30),
         destinations: List.generate(
           labels.length,
           (i) => NavigationDestination(
             icon: Icon(icons[i]),
-            selectedIcon: Icon(icons[i], color: const Color(0xFF4D64F5)),
+            selectedIcon: Icon(icons[i], color: const Color(0xFF2E7D32)),
             label: labels[i],
           ),
         ),

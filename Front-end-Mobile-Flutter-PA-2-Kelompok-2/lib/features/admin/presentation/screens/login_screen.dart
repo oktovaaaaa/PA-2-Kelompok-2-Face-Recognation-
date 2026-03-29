@@ -11,6 +11,7 @@ import '../../../common/widgets/app_text_field.dart';
 import '../../../common/widgets/primary_button.dart';
 import '../../../auth/data/auth_repository.dart';
 import 'otp_login_screen.dart';
+import 'splash_gate.dart';
 
 class LoginScreen extends StatefulWidget {
   final bool pinOnlyMode;
@@ -60,24 +61,18 @@ class _LoginScreenState extends State<LoginScreen> {
       );
 
       if (authenticated) {
-        if (!mounted) return;
-        Provider.of<AuthProvider>(context, listen: false).unlockSession();
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          Provider.of<AuthProvider>(context, listen: false).unlockSession();
 
-        if (widget.pinOnlyMode) return; // In lockscreen, just unlock
+          if (widget.pinOnlyMode) return; // In lockscreen, just unlock
 
-        final role = await SessionStorage.getRole();
-        if (!mounted) return;
-        if (role == 'ADMIN') {
           Navigator.pushAndRemoveUntil(
             context,
-            MaterialPageRoute(builder: (_) => const AdminDashboardScreen()),
+            MaterialPageRoute(builder: (_) => const SplashGate()),
             (_) => false,
           );
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Login Biometrik berhasil.')),
-          );
-        }
+        });
       }
     } catch (_) {}
   }
@@ -157,20 +152,13 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (widget.pinOnlyMode) return; // In lockscreen, just unlock
 
-      final role = await SessionStorage.getRole();
       if (!mounted) return;
 
-      if (role == 'ADMIN') {
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(builder: (_) => const AdminDashboardScreen()),
-          (_) => false,
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Login PIN berhasil.')),
-        );
-      }
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const SplashGate()),
+        (_) => false,
+      );
     } catch (e) {
       final msg = ErrorMapper.map(e);
       if (!mounted) return;

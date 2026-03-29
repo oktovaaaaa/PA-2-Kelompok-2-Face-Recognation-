@@ -10,6 +10,7 @@ class SessionStorage {
   static const _roleKey = 'role';
   static const _companyIdKey = 'company_id';
   static const _deviceIdKey = 'device_id';
+  static const _nameKey = 'user_name';
 
   static Future<void> saveSession({
     required String token,
@@ -18,6 +19,7 @@ class SessionStorage {
     required String role,
     required String companyId,
     required String deviceId,
+    String name = '',
   }) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_tokenKey, token);
@@ -26,6 +28,7 @@ class SessionStorage {
     await prefs.setString(_roleKey, role);
     await prefs.setString(_companyIdKey, companyId);
     await prefs.setString(_deviceIdKey, deviceId);
+    if (name.isNotEmpty) await prefs.setString(_nameKey, name);
   }
 
   static Future<String?> getToken() async {
@@ -53,6 +56,11 @@ class SessionStorage {
     return prefs.getString(_companyIdKey);
   }
 
+  static Future<String?> getUserName() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_nameKey);
+  }
+
   static Future<String> getOrCreateDeviceId() async {
     final prefs = await SharedPreferences.getInstance();
     final saved = prefs.getString(_deviceIdKey);
@@ -67,4 +75,4 @@ class SessionStorage {
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();
   }
-}
+}

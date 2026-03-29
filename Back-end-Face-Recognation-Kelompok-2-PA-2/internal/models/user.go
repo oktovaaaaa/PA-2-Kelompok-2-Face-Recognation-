@@ -10,6 +10,9 @@ type User struct {
 	CompanyID string
 	Company   Company `gorm:"foreignKey:CompanyID"`
 
+	PositionID string
+	Position   Position `gorm:"foreignKey:PositionID"`
+
 	Name     string
 	Email    string `gorm:"unique"`
 	Password string
@@ -22,8 +25,11 @@ type User struct {
 	BirthDate  string
 	Address    string
 
+	PhotoURL string
+	FcmToken string
+
 	Role   string
-	Status string
+	Status string // PENDING | ACTIVE | REJECTED | RESIGNED
 
 	GoogleID string
 

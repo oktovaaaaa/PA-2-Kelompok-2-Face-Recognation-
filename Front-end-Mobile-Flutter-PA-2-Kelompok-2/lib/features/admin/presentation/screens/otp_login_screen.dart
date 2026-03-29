@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:pinput/pinput.dart';
 import '../../../../core/storage/session_storage.dart';
 import '../../../../core/utils/error_mapper.dart';
-import 'admin_dashboard_screen.dart';
+import 'splash_gate.dart';
 import '../../../common/widgets/app_text_field.dart';
 import '../../../common/widgets/primary_button.dart';
 import '../../../auth/data/auth_repository.dart';
@@ -28,21 +28,15 @@ class _OtpLoginScreenState extends State<OtpLoginScreen> {
         code: _otp.text.trim(),
       );
 
-      final role = await SessionStorage.getRole();
-
       if (!mounted) return;
-      if (role == 'ADMIN') {
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(builder: (_) => const AdminDashboardScreen()),
-          (_) => false,
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Login berhasil.')),
-        );
-        Navigator.popUntil(context, (route) => route.isFirst);
-      }
+      
+      // Delegasikan ke SplashGate agar routing handling menjadi seragam (admin maupun employee)
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const SplashGate()),
+        (_) => false,
+      );
+      
     } catch (e) {
       final msg = ErrorMapper.map(e);
       if (!mounted) return;
@@ -53,6 +47,7 @@ class _OtpLoginScreenState extends State<OtpLoginScreen> {
       if (mounted) setState(() => _loading = false);
     }
   }
+
 
   @override
   Widget build(BuildContext context) {

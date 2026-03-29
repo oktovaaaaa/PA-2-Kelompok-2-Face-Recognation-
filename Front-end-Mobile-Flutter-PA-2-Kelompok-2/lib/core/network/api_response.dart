@@ -4,6 +4,8 @@ class ApiResponse {
   final String message;
   final dynamic data;
 
+  bool get success => status;
+
   ApiResponse({
     required this.status,
     required this.message,
@@ -12,9 +14,9 @@ class ApiResponse {
 
   factory ApiResponse.fromJson(Map<String, dynamic> json) {
     return ApiResponse(
-      status: json['status'] == true,
+      status: json['status'] == true || json['success'] == true,
       message: (json['message'] ?? '').toString(),
       data: json['data'],
     );
   }
-}
+}

@@ -42,9 +42,14 @@ func AutoMigrate() {
 
 	DB.AutoMigrate(
 		&models.Company{},
+		&models.Position{},
 		&models.User{},
 		&models.InviteToken{},
 		&models.OTP{},
 		&models.Session{},
+		&models.Attendance{},
+		&models.AttendanceSettings{},
+		&models.LeaveRequest{},
+		&models.Notification{},
 	)
 }

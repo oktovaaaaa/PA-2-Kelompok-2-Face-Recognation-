@@ -60,11 +60,9 @@ class _AppContent extends StatelessWidget {
                 children: [
                   if (child != null) child,
                   if (auth.isSessionLocked)
-                    Positioned.fill(
-                      child: Navigator(
-                        onGenerateRoute: (_) => MaterialPageRoute(
-                          builder: (context) => const features_login.LoginScreen(pinOnlyMode: true),
-                        ),
+                    const Positioned.fill(
+                      child: Material(
+                        child: features_login.LoginScreen(pinOnlyMode: true),
                       ),
                     ),
                 ],
