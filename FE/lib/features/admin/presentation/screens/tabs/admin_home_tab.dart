@@ -7,10 +7,13 @@ import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:image_gallery_saver_plus/image_gallery_saver_plus.dart';
 
+import 'package:fl_chart/fl_chart.dart';
+import '../../../../../core/network/api_client.dart';
 import '../../../../../core/storage/session_storage.dart';
 import '../../../../../core/utils/error_mapper.dart';
 import '../../../../auth/data/auth_repository.dart';
 import '../../../../auth/presentation/screens/pending_employees_screen.dart';
+import '../attendance_report_screen.dart';
 
 class AdminHomeTab extends StatefulWidget {
   const AdminHomeTab({super.key});
@@ -25,11 +28,29 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
   String _generatedToken = '';
   final GlobalKey _qrKey = GlobalKey();
   String? _userName;
+  Map<String, dynamic> _summary = {'present': 0, 'absent': 0, 'late': 0, 'leave': 0, 'total': 0};
+  bool _loadingSummary = false;
 
   @override
   void initState() {
     super.initState();
     _loadUserName();
+    _loadSummary();
+  }
+
+  Future<void> _loadSummary() async {
+    setState(() => _loadingSummary = true);
+    try {
+      // Assuming this endpoint exists or we aggregate data
+      final res = await ApiClient.get('/api/admin/dashboard/summary');
+      if (res.success && mounted) {
+        setState(() => _summary = res.data ?? _summary);
+      }
+    } catch (_) {
+      // Fallback or silence
+    } finally {
+      if (mounted) setState(() => _loadingSummary = false);
+    }
   }
 
   Future<void> _loadUserName() async {
@@ -176,46 +197,112 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF2563EB).withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.auto_graph_rounded, color: Color(0xFF2563EB), size: 14),
-                            SizedBox(width: 4),
-                            Text(
-                              'Quick Overview',
-                              style: TextStyle(color: Color(0xFF2563EB), fontSize: 11, fontWeight: FontWeight.bold),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF2563EB).withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(10),
                             ),
-                          ],
-                        ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.auto_graph_rounded, color: Color(0xFF2563EB), size: 14),
+                                SizedBox(width: 4),
+                                Text(
+                                  'Live Statistics',
+                                  style: TextStyle(color: Color(0xFF2563EB), fontSize: 11, fontWeight: FontWeight.bold),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Text(
+                            DateTime.now().toString().substring(0, 10),
+                            style: TextStyle(color: Colors.grey.shade400, fontSize: 11, fontWeight: FontWeight.bold),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 16),
                       const Text(
-                        'Ringkasan Sistem',
+                        'Ringkasan Kehadiran',
                         style: TextStyle(
                           color: Color(0xFF0F172A),
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 4),
                       Text(
-                        'Gunakan menu di bawah untuk mengatur absensi dan karyawan perusahaan Anda secara efisien.',
-                        style: TextStyle(color: Colors.grey.shade600, fontSize: 13, height: 1.5),
+                        'Status kehadiran karyawan hari ini',
+                        style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
                       ),
+                      const SizedBox(height: 24),
+                      if (_summary['total'] == 0 && !_loadingSummary)
+                        Center(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 20),
+                            child: Text('Belum ada data kehadiran hari ini', style: TextStyle(color: Colors.grey.shade400, fontSize: 13, fontStyle: FontStyle.italic)),
+                          ),
+                        )
+                      else if (_loadingSummary)
+                        const Center(child: Padding(padding: EdgeInsets.symmetric(vertical: 40), child: CircularProgressIndicator(color: Color(0xFF2563EB))))
+                      else
+                        Row(
+                          children: [
+                            SizedBox(
+                              width: 120,
+                              height: 120,
+                              child: PieChart(
+                                PieChartData(
+                                  sectionsSpace: 2,
+                                  centerSpaceRadius: 25,
+                                  sections: [
+                                    if (_summary['present'] > 0) PieChartSectionData(value: (_summary['present'] as num).toDouble(), color: Colors.green, radius: 20, showTitle: false),
+                                    if (_summary['late'] > 0) PieChartSectionData(value: (_summary['late'] as num).toDouble(), color: Colors.orange, radius: 20, showTitle: false),
+                                    if (_summary['absent'] > 0) PieChartSectionData(value: (_summary['absent'] as num).toDouble(), color: Colors.red, radius: 20, showTitle: false),
+                                    if (_summary['leave'] > 0) PieChartSectionData(value: (_summary['leave'] as num).toDouble(), color: Colors.blue, radius: 20, showTitle: false),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 24),
+                            Expanded(
+                              child: Column(
+                                children: [
+                                  _summaryItem(Colors.green, 'Hadir', _summary['present']),
+                                  const SizedBox(height: 8),
+                                  _summaryItem(Colors.orange, 'Terlambat', _summary['late']),
+                                  const SizedBox(height: 8),
+                                  _summaryItem(Colors.red, 'Alpha', _summary['absent']),
+                                  const SizedBox(height: 8),
+                                  _summaryItem(Colors.blue, 'Izin/Sakit', (_summary['leave'] ?? 0) + (_summary['sick'] ?? 0)),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
                     ],
                   ),
                 ),
                 const SizedBox(height: 32),
 
                 const Text(
-                  'Aksi Cepat Admin',
+                  'Manajemen & Laporan',
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF0F172A)),
+                ),
+                const SizedBox(height: 16),
+                _buildMenuCard(
+                  context,
+                  icon: Icons.analytics_rounded,
+                  color: const Color(0xFF8B5CF6),
+                  title: 'Laporan Kehadiran',
+                  subtitle: 'Lihat seluruh riwayat & ekspor Excel',
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const AttendanceReportScreen()),
+                  ),
                 ),
                 const SizedBox(height: 16),
 
@@ -335,6 +422,18 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
         ],
       ),
     ),
+    );
+  }
+
+  Widget _summaryItem(Color color, String label, dynamic count) {
+    return Row(
+      children: [
+        Container(width: 10, height: 10, decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(2))),
+        const SizedBox(width: 8),
+        Text(label, style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+        const Spacer(),
+        Text(count.toString(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF0F172A))),
+      ],
     );
   }
 

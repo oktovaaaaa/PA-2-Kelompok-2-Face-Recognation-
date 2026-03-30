@@ -316,5 +316,31 @@ class AuthRepository {
         .toList();
     return list;
   }
+
+  Future<void> forgotPassword(String email) async {
+    final res = await ApiClient.post('/auth/forgot-password', {
+      'email': email,
+    });
+
+    if (!res.status) {
+      throw Exception(res.message);
+    }
+  }
+
+  Future<void> resetPassword({
+    required String email,
+    required String code,
+    required String newPassword,
+  }) async {
+    final res = await ApiClient.post('/auth/reset-password', {
+      'email': email,
+      'code': code,
+      'newPassword': newPassword,
+    });
+
+    if (!res.status) {
+      throw Exception(res.message);
+    }
+  }
 }
 

@@ -19,6 +19,41 @@ class _OtpLoginScreenState extends State<OtpLoginScreen> {
   final _otp = TextEditingController();
   bool _loading = false;
 
+  int _resendTimer = 0;
+  bool _resending = false;
+
+  void _startTimer() {
+    setState(() => _resendTimer = 30);
+    Future.doWhile(() async {
+      await Future.delayed(const Duration(seconds: 1));
+      if (!mounted) return false;
+      setState(() => _resendTimer--);
+      return _resendTimer > 0;
+    });
+  }
+
+  Future<void> _resend() async {
+    if (_resendTimer > 0 || _resending) return;
+    setState(() => _resending = true);
+    try {
+      await _repo.sendOtp(widget.email);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('OTP baru telah dikirim ke email Anda')),
+        );
+        _startTimer();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal mengirim ulang OTP: ${ErrorMapper.map(e)}')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _resending = false);
+    }
+  }
+
   Future<void> _verify() async {
     setState(() => _loading = true);
     try {
@@ -173,6 +208,19 @@ class _OtpLoginScreenState extends State<OtpLoginScreen> {
                         child: _loading
                             ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                             : const Text('Verifikasi', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    TextButton(
+                      onPressed: (_resendTimer > 0 || _resending) ? null : _resend,
+                      child: Text(
+                        _resendTimer > 0 
+                            ? 'Kirim ulang dalam ${_resendTimer}s' 
+                            : 'Belum mendapatkan kode? Kirim ulang',
+                        style: TextStyle(
+                          color: _resendTimer > 0 ? Colors.grey : const Color(0xFF2563EB),
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
                   ],

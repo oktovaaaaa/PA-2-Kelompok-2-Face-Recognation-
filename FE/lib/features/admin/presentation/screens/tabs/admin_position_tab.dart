@@ -3,7 +3,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../../../core/network/api_client.dart';
-import 'package:flutter/services.dart';
 import '../../../../../core/utils/currency_formatter.dart';
 
 class AdminPositionTab extends StatefulWidget {
@@ -151,8 +150,7 @@ class _AdminPositionTabState extends State<AdminPositionTab> {
 
   String _formatSalary(dynamic salary) {
     if (salary == null) return 'Rp 0';
-    final val = (salary as num).toDouble();
-    return 'Rp ${val.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.')}';
+    return 'Rp ${CurrencyInputFormatter.formatNumber((salary as num).toInt())}';
   }
 
   @override

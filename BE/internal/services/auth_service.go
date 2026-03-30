@@ -126,3 +126,36 @@ func LoginWithDevice(email string, password string, deviceID string) (models.Use
 
 	return user, nil
 }
+
+func GenerateResetOTP(email string) (string, error) {
+	var user models.User
+	if err := database.DB.Where("email = ?", email).First(&user).Error; err != nil {
+		return "", errors.New("EMAIL_NOT_FOUND")
+	}
+
+	code := fmt.Sprintf("%06d", rand.Intn(999999))
+
+	otp := models.OTP{
+		ID:        uuid.New().String(),
+		Email:     email,
+		Code:      code,
+		Type:      "RESET",
+		Used:      false,
+		ExpiresAt: time.Now().Add(5 * time.Minute),
+	}
+
+	err := database.DB.Create(&otp).Error
+	return code, err
+}
+
+func ResetPassword(email string, newPassword string) error {
+	var user models.User
+	if err := database.DB.Where("email = ?", email).First(&user).Error; err != nil {
+		return errors.New("USER_NOT_FOUND")
+	}
+
+	hashPassword, _ := utils.HashPassword(newPassword)
+	user.Password = hashPassword
+
+	return database.DB.Save(&user).Error
+}

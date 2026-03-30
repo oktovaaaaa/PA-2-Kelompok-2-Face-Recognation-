@@ -307,3 +307,57 @@ func LoginPin(c *gin.Context) {
 		"token": token,
 	})
 }
+
+func ForgotPassword(c *gin.Context) {
+	var body struct {
+		Email string `json:"email"`
+	}
+
+	if err := c.ShouldBindJSON(&body); err != nil {
+		utils.Error(c, "Email tidak valid")
+		return
+	}
+
+	code, err := services.GenerateResetOTP(body.Email)
+	if err != nil {
+		utils.Error(c, "Email tidak terdaftar atau gagal membuat OTP")
+		return
+	}
+
+	err = services.SendOTPEmail(body.Email, code)
+	if err != nil {
+		utils.Error(c, "Gagal mengirim email reset")
+		return
+	}
+
+	utils.Success(c, "OTP reset password telah dikirim", nil)
+}
+
+func ResetPassword(c *gin.Context) {
+	var body struct {
+		Email       string `json:"email"`
+		Code        string `json:"code"`
+		NewPassword string `json:"newPassword"`
+	}
+
+	if err := c.ShouldBindJSON(&body); err != nil {
+		utils.Error(c, "Data tidak lengkap")
+		return
+	}
+
+	// Verify OTP
+	err := services.VerifyOTP(body.Email, body.Code)
+	if err != nil {
+		utils.Error(c, "OTP tidak valid atau sudah kedaluwarsa")
+		return
+	}
+
+	// Update Password
+	err = services.ResetPassword(body.Email, body.NewPassword)
+	if err != nil {
+		utils.Error(c, "Gagal mereset password")
+		return
+	}
+
+	utils.Success(c, "Password berhasil diperbarui", nil)
+}

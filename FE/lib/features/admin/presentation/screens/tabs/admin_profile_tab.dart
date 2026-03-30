@@ -5,6 +5,7 @@ import '../../../../../core/network/api_client.dart';
 import '../../../../../core/storage/session_storage.dart';
 import 'package:flutter/services.dart';
 import '../../../../../core/utils/currency_formatter.dart';
+import 'package:front_end/features/auth/presentation/screens/landing_screen.dart';
 
 class AdminProfileTab extends StatefulWidget {
   const AdminProfileTab({super.key});
@@ -23,6 +24,41 @@ class _AdminProfileTabState extends State<AdminProfileTab> {
   void initState() {
     super.initState();
     _load();
+  }
+
+  Future<void> _logout() async {
+    final act = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Keluar', style: TextStyle(fontWeight: FontWeight.bold)),
+        content: const Text('Apakah Anda yakin ingin keluar dari aplikasi?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Batal'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red.shade600,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Keluar'),
+          ),
+        ],
+      ),
+    );
+
+    if (act != true) return;
+    await SessionStorage.clear();
+    if (!mounted) return;
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => const LandingScreen()),
+      (_) => false,
+    );
   }
 
   Future<void> _load() async {
@@ -334,7 +370,7 @@ class _AdminProfileTabState extends State<AdminProfileTab> {
                         ),
                       ),
                       GestureDetector(
-                        onTap: () async { await SessionStorage.clear(); },
+                        onTap: _logout,
                         child: Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(color: Colors.white.withOpacity(0.15), borderRadius: BorderRadius.circular(10)),
@@ -391,7 +427,7 @@ class _AdminProfileTabState extends State<AdminProfileTab> {
                       rows: [
                         _infoRow('Check-In', '${_val(_settings, ['check_in_start'])} – ${_val(_settings, ['check_in_end'])}'),
                         _infoRow('Check-Out', '${_val(_settings, ['check_out_start'])} – ${_val(_settings, ['check_out_end'])}'),
-                        _infoRow('Denda Alpha', 'Rp ${_settings?['alpha_penalty'] ?? 0}'),
+                        _infoRow('Denda Alpha', 'Rp ${CurrencyInputFormatter.formatNumber((_settings?['alpha_penalty'] as num?)?.toInt() ?? 0)}'),
                       ],
                     ),
                   ],

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../../core/network/api_client.dart';
 import '../../../../../core/storage/session_storage.dart';
+import '../../../../../core/utils/currency_formatter.dart';
 import 'package:flutter/services.dart';
 
 class EmployeeAttendanceTab extends StatefulWidget {
@@ -63,8 +64,8 @@ class _EmployeeAttendanceTabState extends State<EmployeeAttendanceTab> {
   }
 
   String _formatRp(dynamic amount) {
-    final num = double.tryParse(amount?.toString() ?? '0') ?? 0;
-    return 'Rp ${num.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.')}';
+    if (amount == null) return 'Rp 0';
+    return 'Rp ${CurrencyInputFormatter.formatNumber((amount as num).toInt())}';
   }
 
   @override

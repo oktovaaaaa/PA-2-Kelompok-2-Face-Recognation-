@@ -36,6 +36,8 @@ func SetupRouter() *gin.Engine {
 	api.POST("/auth/google-login", handlers.GoogleLogin)
 	api.POST("/auth/register-employee", handlers.RegisterEmployee)
 	api.POST("/auth/login-pin", handlers.LoginPin)
+	api.POST("/auth/forgot-password", handlers.ForgotPassword)
+	api.POST("/auth/reset-password", handlers.ResetPassword)
 
 	// Protected routes (semua user yang sudah login)
 	protected := api.Group("/")

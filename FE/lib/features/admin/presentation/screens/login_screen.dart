@@ -13,6 +13,8 @@ import '../../../common/widgets/wavy_background.dart';
 import '../../../auth/data/auth_repository.dart';
 import 'otp_login_screen.dart';
 import 'splash_gate.dart';
+import '../../../auth/presentation/screens/forgot_password_screen.dart';
+import 'reset_password_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   final bool pinOnlyMode;
@@ -244,7 +246,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 const SizedBox(height: 32),
               ],
               Text(
-                pinOnly ? 'Login PIN' : 'Welcome Back!',
+                pinOnly ? 'Login PIN' : 'Selamat Datang!',
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   fontSize: 32,
@@ -339,7 +341,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             const SizedBox(height: 20),
                             AppTextField(
                               controller: _password,
-                              label: 'Password',
+                              label: 'Kata Sandi',
                               obscure: true,
                               validator: _required,
                             ),
@@ -363,7 +365,18 @@ class _LoginScreenState extends State<LoginScreen> {
                                     Text('Ingat saya', style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
                                   ],
                                 ),
-                                Text('Lupa sandi?', style: TextStyle(color: const Color(0xFF2563EB), fontWeight: FontWeight.bold, fontSize: 13)),
+                                GestureDetector(
+                                  onTap: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(builder: (_) => const ForgotPasswordScreen()),
+                                    );
+                                  },
+                                  child: const Text(
+                                    'Lupa sandi?', 
+                                    style: TextStyle(color: Color(0xFF2563EB), fontWeight: FontWeight.bold, fontSize: 13),
+                                  ),
+                                ),
                               ],
                             ),
                             const SizedBox(height: 32),
@@ -377,9 +390,9 @@ class _LoginScreenState extends State<LoginScreen> {
                                   elevation: 0,
                                 ),
                                 onPressed: _loginEmail,
-                                child: _loading 
+                                  child: _loading 
                                   ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                                  : const Text('Sign In', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+                                  : const Text('Masuk', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
                               ),
                             ),
                             const SizedBox(height: 32),
