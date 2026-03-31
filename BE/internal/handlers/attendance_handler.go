@@ -164,11 +164,20 @@ func AdminGetAttendanceHistory(c *gin.Context) {
 	userCtx, _ := c.Get("user")
 	adminUser := userCtx.(models.User)
 
+	startDate := c.Query("start_date")
+	endDate := c.Query("end_date")
 	filter := c.DefaultQuery("filter", "month")
 	userID := c.Query("user_id")
-	start := getFilterStart(filter)
 
-	query := database.DB.Where("company_id = ? AND date >= ?", adminUser.CompanyID, start)
+	query := database.DB.Where("company_id = ?", adminUser.CompanyID)
+
+	if startDate != "" && endDate != "" {
+		query = query.Where("date >= ? AND date <= ?", startDate, endDate)
+	} else {
+		start := getFilterStart(filter)
+		query = query.Where("date >= ?", start)
+	}
+
 	if userID != "" {
 		query = query.Where("user_id = ?", userID)
 	}

@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../../../core/network/api_client.dart';
+import '../employee_stats_screen.dart';
 
 class AdminEmployeeTab extends StatefulWidget {
   const AdminEmployeeTab({super.key});
@@ -262,6 +263,11 @@ class _AdminEmployeeTabState extends State<AdminEmployeeTab> with SingleTickerPr
             _detailRow('Alamat', emp['address'] ?? '-'),
             _detailRow('Tgl Lahir', emp['birth_date'] ?? '-'),
             const Divider(height: 24),
+            _actionButton(Icons.analytics_rounded, 'Lihat Statistik Kehadiran', Colors.deepPurple, () { 
+              Navigator.pop(ctx); 
+              Navigator.push(context, MaterialPageRoute(builder: (_) => EmployeeStatsScreen(userId: emp['id'], userName: emp['name'])));
+            }),
+            const SizedBox(height: 12),
             if (isActive) ...[
               _actionButton(Icons.work_rounded, 'Set Jabatan', Colors.blue, () { Navigator.pop(ctx); _showAssignPosition(emp); }),
               const SizedBox(height: 8),

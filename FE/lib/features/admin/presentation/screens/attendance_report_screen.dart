@@ -4,6 +4,8 @@ import '../../../../core/network/api_client.dart';
 import '../../../../core/services/excel_export_service.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import 'package:open_filex/open_filex.dart';
+import 'package:fl_chart/fl_chart.dart';
+import 'package:intl/intl.dart';
 
 class AttendanceReportScreen extends StatefulWidget {
   const AttendanceReportScreen({super.key});
@@ -18,6 +20,11 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
   bool _loading = false;
   String _searchQuery = '';
   String _statusFilter = 'ALL';
+  
+  // New Analytics State
+  DateTimeRange? _selectedDateRange;
+  bool _isLineChart = false;
+  String _periodFilter = 'month'; // 'week', 'month', 'year', 'custom'
 
   @override
   void initState() {
@@ -28,9 +35,15 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
   Future<void> _loadData() async {
     setState(() => _loading = true);
     try {
-      // Fetch both attendance history and approved leave requests in parallel
+      String attendanceUrl = '/api/admin/attendance?filter=$_periodFilter';
+      if (_periodFilter == 'custom' && _selectedDateRange != null) {
+        final start = DateFormat('yyyy-MM-dd').format(_selectedDateRange!.start);
+        final end = DateFormat('yyyy-MM-dd').format(_selectedDateRange!.end);
+        attendanceUrl = '/api/admin/attendance?start_date=$start&end_date=$end';
+      }
+
       final results = await Future.wait([
-        ApiClient.get('/api/admin/attendance/history'),
+        ApiClient.get(attendanceUrl),
         ApiClient.get('/api/admin/leaves?status=APPROVED'),
       ]);
 
@@ -156,9 +169,14 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
                       ),
                       const Expanded(
                         child: Text(
-                          'Laporan Kehadiran',
+                          'Laporan & Statistik',
                           style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
                         ),
+                      ),
+                      IconButton(
+                        onPressed: _selectDateRange,
+                        icon: const Icon(Icons.calendar_month_rounded, color: Colors.white),
+                        tooltip: 'Pilih Rentang Tanggal',
                       ),
                       IconButton(
                         onPressed: _exportExcel,
@@ -170,6 +188,9 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
                 ],
               ),
             ),
+
+            // Analytics Section
+            if (!_loading && _allRecords.isNotEmpty) _buildAnalyticsSection(),
 
             // Filters
             Padding(
@@ -195,6 +216,13 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
                     scrollDirection: Axis.horizontal,
                     child: Row(
                       children: [
+                        _periodChip('week', 'Minggu Ini'),
+                        _periodChip('month', 'Bulan Ini'),
+                        _periodChip('year', 'Tahun Ini'),
+                        if (_selectedDateRange != null) _periodChip('custom', 'Kustom'),
+                        const SizedBox(width: 16),
+                        Container(width: 1, height: 20, color: Colors.grey.shade300),
+                        const SizedBox(width: 16),
                         _filterChip('ALL', 'Semua'),
                         _filterChip('PRESENT', 'Hadir'),
                         _filterChip('LATE', 'Terlambat'),
@@ -257,6 +285,228 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: Colors.grey.shade200)),
         showCheckmark: false,
       ),
+    );
+  }
+
+  Widget _periodChip(String p, String label) {
+    final isSelected = _periodFilter == p;
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: FilterChip(
+        selected: isSelected,
+        label: Text(label),
+        labelStyle: TextStyle(
+          color: isSelected ? Colors.white : const Color(0xFF2563EB),
+          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          fontSize: 11,
+        ),
+        backgroundColor: const Color(0xFF2563EB).withOpacity(0.05),
+        selectedColor: const Color(0xFF2563EB),
+        onSelected: (v) {
+          setState(() => _periodFilter = p);
+          _loadData();
+        },
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide.none),
+        showCheckmark: false,
+      ),
+    );
+  }
+
+  Future<void> _selectDateRange() async {
+    final range = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2023),
+      lastDate: DateTime.now(),
+      initialDateRange: _selectedDateRange,
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: Color(0xFF2563EB),
+              onPrimary: Colors.white,
+              onSurface: Color(0xFF0F172A),
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (range != null) {
+      setState(() {
+        _selectedDateRange = range;
+        _periodFilter = 'custom';
+      });
+      _loadData();
+    }
+  }
+
+  Widget _buildAnalyticsSection() {
+    // Agreggate data for charts
+    Map<String, Map<String, int>> dailyStats = {};
+    int present = 0, late = 0, absent = 0, other = 0;
+
+    for (var r in _filteredRecords) {
+      final date = (r['date'] ?? '').toString();
+      final status = (r['status'] ?? '').toString().toUpperCase();
+      
+      if (!dailyStats.containsKey(date)) {
+        dailyStats[date] = {'PRESENT': 0, 'LATE': 0, 'ABSENT': 0, 'OTHER': 0};
+      }
+
+      if (status == 'PRESENT') { present++; dailyStats[date]!['PRESENT'] = (dailyStats[date]!['PRESENT'] ?? 0) + 1; }
+      else if (status == 'LATE') { late++; dailyStats[date]!['LATE'] = (dailyStats[date]!['LATE'] ?? 0) + 1; }
+      else if (status == 'ABSENT') { absent++; dailyStats[date]!['ABSENT'] = (dailyStats[date]!['ABSENT'] ?? 0) + 1; }
+      else { other++; dailyStats[date]!['OTHER'] = (dailyStats[date]!['OTHER'] ?? 0) + 1; }
+    }
+
+    final sortedDates = dailyStats.keys.toList()..sort();
+    // Only show last 7 days in chart if many
+    final displayDates = sortedDates.length > 7 ? sortedDates.sublist(sortedDates.length - 7) : sortedDates;
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 15, offset: const Offset(0, 5))],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Statistik Kehadiran', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              Row(
+                children: [
+                  IconButton(
+                    onPressed: () => setState(() => _isLineChart = false),
+                    icon: Icon(Icons.bar_chart_rounded, color: !_isLineChart ? const Color(0xFF2563EB) : Colors.grey.shade300),
+                  ),
+                  IconButton(
+                    onPressed: () => setState(() => _isLineChart = true),
+                    icon: Icon(Icons.show_chart_rounded, color: _isLineChart ? const Color(0xFF2563EB) : Colors.grey.shade300),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            height: 180,
+            child: _isLineChart 
+              ? _buildLineChart(displayDates, dailyStats)
+              : _buildBarChart(displayDates, dailyStats),
+          ),
+          const SizedBox(height: 20),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _legendItem(Colors.green, 'Hadir'),
+              _legendItem(Colors.orange, 'Telat'),
+              _legendItem(Colors.red, 'Alpha'),
+              _legendItem(Colors.blue, 'Izin'),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBarChart(List<String> dates, Map<String, Map<String, int>> data) {
+    return BarChart(
+      BarChartData(
+        alignment: BarChartAlignment.spaceAround,
+        maxY: 10,
+        barTouchData: BarTouchData(enabled: true),
+        titlesData: FlTitlesData(
+          show: true,
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              getTitlesWidget: (val, meta) {
+                if (val.toInt() >= dates.length) return const SizedBox();
+                final d = dates[val.toInt()];
+                return Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(d.substring(8), style: TextStyle(color: Colors.grey.shade500, fontSize: 10)),
+                );
+              },
+            ),
+          ),
+          leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        ),
+        gridData: const FlGridData(show: false),
+        borderData: FlBorderData(show: false),
+        barGroups: List.generate(dates.length, (i) {
+          final d = dates[i];
+          final s = data[d]!;
+          return BarChartGroupData(
+            x: i,
+            barRods: [
+              BarChartRodData(toY: s['PRESENT']!.toDouble(), color: Colors.green, width: 6),
+              BarChartRodData(toY: s['LATE']!.toDouble(), color: Colors.orange, width: 6),
+              BarChartRodData(toY: s['ABSENT']!.toDouble(), color: Colors.red, width: 6),
+              BarChartRodData(toY: s['OTHER']!.toDouble(), color: Colors.blue, width: 6),
+            ],
+          );
+        }),
+      ),
+    );
+  }
+
+  Widget _buildLineChart(List<String> dates, Map<String, Map<String, int>> data) {
+    return LineChart(
+      LineChartData(
+        gridData: const FlGridData(show: false),
+        titlesData: FlTitlesData(
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              getTitlesWidget: (val, meta) {
+                if (val.toInt() >= dates.length) return const SizedBox();
+                final d = dates[val.toInt()];
+                return Text(d.substring(8), style: TextStyle(color: Colors.grey.shade500, fontSize: 10));
+              },
+            ),
+          ),
+          leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        ),
+        borderData: FlBorderData(show: false),
+        lineBarsData: [
+          _lineData(dates, data, 'PRESENT', Colors.green),
+          _lineData(dates, data, 'LATE', Colors.orange),
+          _lineData(dates, data, 'ABSENT', Colors.red),
+          _lineData(dates, data, 'OTHER', Colors.blue),
+        ],
+      ),
+    );
+  }
+
+  LineChartBarData _lineData(List<String> dates, Map<String, Map<String, int>> data, String key, Color color) {
+    return LineChartBarData(
+      spots: List.generate(dates.length, (i) => FlSpot(i.toDouble(), data[dates[i]]![key]!.toDouble())),
+      isCurved: true,
+      color: color,
+      barWidth: 3,
+      isStrokeCapRound: true,
+      dotData: const FlDotData(show: false),
+      belowBarData: BarAreaData(show: true, color: color.withOpacity(0.1)),
+    );
+  }
+
+  Widget _legendItem(Color color, String label) {
+    return Row(
+      children: [
+        Container(width: 8, height: 8, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+        const SizedBox(width: 6),
+        Text(label, style: TextStyle(color: Colors.grey.shade700, fontSize: 11)),
+      ],
     );
   }
 
