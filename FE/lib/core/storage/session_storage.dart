@@ -73,6 +73,11 @@ class SessionStorage {
 
   static Future<void> clear() async {
     final prefs = await SharedPreferences.getInstance();
+    // Kita hapus semua kecuali device_id agar tetap ingat perangkat yang sama
+    final deviceId = prefs.getString(_deviceIdKey);
     await prefs.clear();
+    if (deviceId != null) {
+      await prefs.setString(_deviceIdKey, deviceId);
+    }
   }
 }

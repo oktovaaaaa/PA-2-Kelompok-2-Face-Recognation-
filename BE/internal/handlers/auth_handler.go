@@ -106,7 +106,7 @@ func SendOTP(c *gin.Context) {
 
 	if err != nil {
 
-		utils.Error(c, "Gagal membuat OTP")
+		utils.Error(c, err.Error())
 		return
 	}
 
@@ -184,9 +184,9 @@ func Login(c *gin.Context) {
 func VerifyLoginOTP(c *gin.Context) {
 
 	var body struct {
-		Email    string
-		Code     string
-		DeviceID string
+		Email    string `json:"email"`
+		Code     string `json:"code"`
+		DeviceID string `json:"device_id"`
 	}
 
 	if err := c.ShouldBindJSON(&body); err != nil {
@@ -215,14 +215,17 @@ func VerifyLoginOTP(c *gin.Context) {
 		return
 	}
 
-	if user.DeviceID != "" && user.DeviceID != body.DeviceID {
-		utils.Error(c, "ACCOUNT_ALREADY_ACTIVE_ON_ANOTHER_DEVICE")
-		return
-	}
+	// Device Binding Logic (Hanya untuk KARYAWAN)
+	if user.Role != "ADMIN" {
+		if user.DeviceID != "" && user.DeviceID != body.DeviceID {
+			utils.Error(c, "ACCOUNT_ALREADY_ACTIVE_ON_ANOTHER_DEVICE")
+			return
+		}
 
-	if user.DeviceID == "" {
-		user.DeviceID = body.DeviceID
-		database.DB.Save(&user)
+		if user.DeviceID == "" {
+			user.DeviceID = body.DeviceID
+			database.DB.Save(&user)
+		}
 	}
 
 	token, _ := services.GenerateToken(user.ID)
@@ -296,8 +299,9 @@ func GoogleLogin(c *gin.Context) {
 func LoginPin(c *gin.Context) {
 
 	var body struct {
-		UserID string `json:"userID"`
-		Pin    string `json:"pin"`
+		UserID   string `json:"userID"`
+		Pin      string `json:"pin"`
+		DeviceID string `json:"device_id"`
 	}
 
 	if err := c.ShouldBindJSON(&body); err != nil {
@@ -312,6 +316,19 @@ func LoginPin(c *gin.Context) {
 
 		utils.Error(c, err.Error())
 		return
+	}
+
+	// Device Binding Logic (Hanya untuk KARYAWAN)
+	if user.Role != "ADMIN" {
+		if user.DeviceID != "" && user.DeviceID != body.DeviceID {
+			utils.Error(c, "ACCOUNT_ALREADY_ACTIVE_ON_ANOTHER_DEVICE")
+			return
+		}
+
+		if user.DeviceID == "" && body.DeviceID != "" {
+			user.DeviceID = body.DeviceID
+			database.DB.Save(&user)
+		}
 	}
 
 	token, _ := services.GenerateToken(user.ID)

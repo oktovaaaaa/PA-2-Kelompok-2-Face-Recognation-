@@ -88,7 +88,7 @@ func GetPendingEmployees(c *gin.Context) {
 func ApproveEmployee(c *gin.Context) {
 
 	var body struct {
-		UserID string
+		UserID string `json:"user_id"`
 	}
 
 	if err := c.ShouldBindJSON(&body); err != nil {
@@ -121,7 +121,7 @@ func ApproveEmployee(c *gin.Context) {
 func RejectEmployee(c *gin.Context) {
 
 	var body struct {
-		UserID string
+		UserID string `json:"user_id"`
 	}
 
 	if err := c.ShouldBindJSON(&body); err != nil {
@@ -212,7 +212,7 @@ func ResetDeviceBinding(c *gin.Context) {
 	adminUser := userCtx.(models.User)
 
 	var body struct {
-		UserID string
+		UserID string `json:"user_id"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		utils.Error(c, "Data tidak valid")

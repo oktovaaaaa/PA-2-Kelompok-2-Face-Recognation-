@@ -120,9 +120,12 @@ class AuthRepository {
     required String email,
     required String code,
   }) async {
+    final deviceId = await SessionStorage.getOrCreateDeviceId();
+
     final tokenRes = await ApiClient.post('/auth/verify-login-otp', {
       'email': email,
       'code': code,
+      'device_id': deviceId,
     });
 
     if (!tokenRes.status) {
@@ -134,8 +137,6 @@ class AuthRepository {
     final userEmail = (tokenRes.data?['email'] ?? '').toString();
     final role = (tokenRes.data?['role'] ?? '').toString();
     final companyId = (tokenRes.data?['companyId'] ?? '').toString();
-    final deviceId = await SessionStorage.getOrCreateDeviceId();
-
     await SessionStorage.saveSession(
       token: token,
       userId: userId,
@@ -172,9 +173,12 @@ class AuthRepository {
       throw Exception('Sesi pengguna tidak ditemukan.');
     }
 
+    final deviceId = await SessionStorage.getOrCreateDeviceId();
+
     final res = await ApiClient.post('/auth/login-pin', {
       'userID': userId,
       'pin': pin,
+      'device_id': deviceId,
     });
 
     if (!res.status) {
@@ -185,7 +189,6 @@ class AuthRepository {
     final email = await SessionStorage.getEmail() ?? '';
     final role = await SessionStorage.getRole() ?? '';
     final companyId = await SessionStorage.getCompanyId() ?? '';
-    final deviceId = await SessionStorage.getOrCreateDeviceId();
 
     await SessionStorage.saveSession(
       token: token,
@@ -349,6 +352,39 @@ class AuthRepository {
     if (!res.status) {
       throw Exception(res.message);
     }
+  }
+
+  // --- Profile Security ---
+  
+  Future<void> requestProfileOtp() async {
+    final res = await ApiClient.post('/profile/request-otp', {});
+    if (!res.status) throw Exception(res.message);
+  }
+
+  Future<void> changePassword({
+    String? oldPassword,
+    String? otpCode,
+    required String newPassword,
+  }) async {
+    final res = await ApiClient.post('/profile/change-password', {
+      if (oldPassword != null) 'old_password': oldPassword,
+      if (otpCode != null) 'otp_code': otpCode,
+      'new_password': newPassword,
+    });
+    if (!res.status) throw Exception(res.message);
+  }
+
+  Future<void> changePin({
+    String? oldPin,
+    String? otpCode,
+    required String newPin,
+  }) async {
+    final res = await ApiClient.post('/profile/change-pin', {
+      if (oldPin != null) 'old_pin': oldPin,
+      if (otpCode != null) 'otp_code': otpCode,
+      'new_pin': newPin,
+    });
+    if (!res.status) throw Exception(res.message);
   }
 }
 

@@ -50,6 +50,9 @@ func SetupRouter() *gin.Engine {
 		protected.GET("/profile", handlers.GetMyProfile)
 		protected.PUT("/profile", handlers.UpdateMyProfile)
 		protected.PUT("/profile/fcm-token", handlers.UpdateFcmToken)
+		protected.POST("/profile/request-otp", handlers.RequestProfileOTP)
+		protected.POST("/profile/change-password", handlers.ChangePassword)
+		protected.POST("/profile/change-pin", handlers.ChangePin)
 
 		// Notifikasi (admin & karyawan)
 		protected.GET("/notifications", handlers.GetNotifications)

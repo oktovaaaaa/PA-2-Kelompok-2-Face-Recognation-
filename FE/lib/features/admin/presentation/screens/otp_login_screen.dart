@@ -24,6 +24,12 @@ class _OtpLoginScreenState extends State<OtpLoginScreen> {
   int _resendTimer = 0;
   bool _resending = false;
 
+  @override
+  void initState() {
+    super.initState();
+    _startTimer(); // Mulai timer otomatis saat masuk halaman
+  }
+
   void _startTimer() {
     setState(() => _resendTimer = 30);
     Future.doWhile(() async {

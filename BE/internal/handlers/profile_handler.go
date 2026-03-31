@@ -5,6 +5,7 @@ package handlers
 import (
 	"employee-system/internal/database"
 	"employee-system/internal/models"
+	"employee-system/internal/services"
 	"employee-system/internal/utils"
 
 	"github.com/gin-gonic/gin"
@@ -119,4 +120,135 @@ func UpdateFcmToken(c *gin.Context) {
 
 	database.DB.Model(&models.User{}).Where("id = ?", user.ID).Update("fcm_token", body.FcmToken)
 	utils.Success(c, "FCM token berhasil disimpan", nil)
+}
+
+// RequestProfileOTP — kirim OTP ke email user yang sedang login untuk verifikasi ubah password/pin
+func RequestProfileOTP(c *gin.Context) {
+	userCtx, _ := c.Get("user")
+	user := userCtx.(models.User)
+
+	code, err := services.GenerateOTP(user.Email)
+	if err != nil {
+		utils.Error(c, "Gagal membuat OTP: "+err.Error())
+		return
+	}
+
+	services.SendOTPEmail(user.Email, code)
+	utils.Success(c, "OTP berhasil dikirim ke email Anda", nil)
+}
+
+// ChangePassword — ubah password sendiri (verifikasi Password Lama ATAU OTP)
+func ChangePassword(c *gin.Context) {
+	userCtx, _ := c.Get("user")
+	user := userCtx.(models.User)
+
+	var body struct {
+		OldPassword string `json:"old_password"`
+		OtpCode     string `json:"otp_code"`
+		NewPassword string `json:"new_password"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		utils.Error(c, "Data tidak valid")
+		return
+	}
+
+	if body.NewPassword == "" {
+		utils.Error(c, "Password baru wajib diisi")
+		return
+	}
+
+	// 1. Verifikasi Identitas
+	verified := false
+
+	// Cek Password Lama (jika diisi)
+	if body.OldPassword != "" {
+		if utils.CheckPassword(user.Password, body.OldPassword) {
+			verified = true
+		} else {
+			utils.Error(c, "Password lama salah")
+			return
+		}
+	}
+
+	// Cek OTP (jika diisi dan belum terverifikasi lewat password lama)
+	if !verified && body.OtpCode != "" {
+		if err := services.VerifyOTP(user.Email, body.OtpCode); err == nil {
+			verified = true
+		} else {
+			utils.Error(c, "Kode OTP tidak valid atau kedaluwarsa")
+			return
+		}
+	}
+
+	if !verified {
+		utils.Error(c, "Harap masukkan password lama atau kode OTP untuk verifikasi")
+		return
+	}
+
+	// 2. Update Password Baru
+	hash, _ := utils.HashPassword(body.NewPassword)
+	if err := database.DB.Model(&models.User{}).Where("id = ?", user.ID).Update("password", hash).Error; err != nil {
+		utils.Error(c, "Gagal memperbarui password")
+		return
+	}
+
+	utils.Success(c, "Password berhasil diperbarui", nil)
+}
+
+// ChangePin — ubah PIN sendiri (verifikasi PIN Lama ATAU OTP)
+func ChangePin(c *gin.Context) {
+	userCtx, _ := c.Get("user")
+	user := userCtx.(models.User)
+
+	var body struct {
+		OldPin  string `json:"old_pin"`
+		OtpCode string `json:"otp_code"`
+		NewPin  string `json:"new_pin"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		utils.Error(c, "Data tidak valid")
+		return
+	}
+
+	if body.NewPin == "" || len(body.NewPin) != 6 {
+		utils.Error(c, "PIN baru harus 6 digit angka")
+		return
+	}
+
+	// 1. Verifikasi Identitas
+	verified := false
+
+	// Cek PIN Lama (jika diisi)
+	if body.OldPin != "" {
+		if utils.CheckPin(user.Pin, body.OldPin) {
+			verified = true
+		} else {
+			utils.Error(c, "PIN lama salah")
+			return
+		}
+	}
+
+	// Cek OTP (jika diisi dan belum terverifikasi lewat PIN lama)
+	if !verified && body.OtpCode != "" {
+		if err := services.VerifyOTP(user.Email, body.OtpCode); err == nil {
+			verified = true
+		} else {
+			utils.Error(c, "Kode OTP tidak valid atau kedaluwarsa")
+			return
+		}
+	}
+
+	if !verified {
+		utils.Error(c, "Harap masukkan PIN lama atau kode OTP untuk verifikasi")
+		return
+	}
+
+	// 2. Update PIN Baru
+	hash, _ := utils.HashPin(body.NewPin)
+	if err := database.DB.Model(&models.User{}).Where("id = ?", user.ID).Update("pin", hash).Error; err != nil {
+		utils.Error(c, "Gagal memperbarui PIN")
+		return
+	}
+
+	utils.Success(c, "PIN berhasil diperbarui", nil)
 }

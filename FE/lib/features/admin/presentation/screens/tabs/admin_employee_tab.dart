@@ -6,6 +6,7 @@ import '../employee_stats_screen.dart';
 import '../../../../../core/network/api_client.dart';
 import '../../../../common/widgets/app_dialog.dart';
 import '../../../../../core/utils/error_mapper.dart';
+import '../../../../../core/constants/app_constants.dart';
 
 class AdminEmployeeTab extends StatefulWidget {
   const AdminEmployeeTab({super.key});
@@ -103,9 +104,9 @@ class _AdminEmployeeTabState extends State<AdminEmployeeTab> with SingleTickerPr
   Future<void> _resetDevice(Map<String, dynamic> emp) async {
     final confirmed = await AppDialog.showConfirm(
       context,
-      title: 'Reset Device ID',
-      message: 'Reset device ID ${emp['name']}? Karyawan bisa login di HP baru setelah ini.',
-      confirmText: 'Ya, Reset',
+      title: 'Hapus Perangkat',
+      message: 'Hapus perangkat pada akun ini? Karyawan bisa login di HP baru setelah ini.',
+      confirmText: 'Ya, Hapus',
       confirmColor: Colors.orange,
     );
     if (confirmed != true) return;
@@ -114,9 +115,10 @@ class _AdminEmployeeTabState extends State<AdminEmployeeTab> with SingleTickerPr
       final res = await ApiClient.post('/api/admin/reset-device', {'user_id': emp['id']});
       if (!mounted) return;
       if (res.success) {
-        AppDialog.showSuccess(context, 'Device ID berhasil direset');
+        AppDialog.showSuccess(context, 'Perangkat berhasil dihapus dari akun');
+        _loadData();
       } else {
-        AppDialog.showError(context, res.message ?? 'Gagal meriset device id');
+        AppDialog.showError(context, res.message ?? 'Gagal menghapus perangkat');
       }
     } catch (_) {}
   }
@@ -203,12 +205,24 @@ class _AdminEmployeeTabState extends State<AdminEmployeeTab> with SingleTickerPr
           children: [
             Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)))),
             const SizedBox(height: 16),
-            CircleAvatar(
-              radius: 32,
-              backgroundColor: const Color(0xFF4D64F5).withAlpha(30),
-              child: Text(
-                (emp['name'] ?? 'K').substring(0, 1).toUpperCase(),
-                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF4D64F5)),
+            Container(
+              padding: const EdgeInsets.all(2),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: const Color(0xFF2563EB).withOpacity(0.1), width: 2),
+              ),
+              child: CircleAvatar(
+                radius: 32,
+                backgroundColor: const Color(0xFF2563EB).withOpacity(0.1),
+                backgroundImage: (emp['photo_url'] != null && emp['photo_url'].toString().isNotEmpty)
+                    ? NetworkImage('${AppConstants.baseUrl}${emp['photo_url']}')
+                    : null,
+                child: (emp['photo_url'] == null || emp['photo_url'].toString().isEmpty)
+                    ? Text(
+                        _getInitials(emp['name'] ?? 'Karyawan'),
+                        style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFF2563EB)),
+                      )
+                    : null,
               ),
             ),
             const SizedBox(height: 12),
@@ -236,8 +250,7 @@ class _AdminEmployeeTabState extends State<AdminEmployeeTab> with SingleTickerPr
             if (isActive) ...[
               _actionButton(Icons.work_rounded, 'Set Jabatan', Colors.blue, () { Navigator.pop(ctx); _showAssignPosition(emp); }),
               const SizedBox(height: 8),
-              if (hasDevice)
-                _actionButton(Icons.phone_android_rounded, 'Reset Device ID', Colors.orange, () { Navigator.pop(ctx); _resetDevice(emp); }),
+              _actionButton(Icons.phone_android_rounded, 'Hapus perangkat pada akun ini', Colors.orange, () { Navigator.pop(ctx); _resetDevice(emp); }),
               const SizedBox(height: 8),
               _actionButton(Icons.person_remove_rounded, 'Pecat Karyawan', Colors.red, () { Navigator.pop(ctx); _fireEmployee(emp); }),
             ] else ...[
@@ -247,6 +260,15 @@ class _AdminEmployeeTabState extends State<AdminEmployeeTab> with SingleTickerPr
         ),
       ),
     );
+  }
+
+  String _getInitials(String name) {
+    if (name.trim().isEmpty) return '?';
+    final pts = name.trim().split(RegExp(r'\s+'));
+    if (pts.length >= 2) {
+      return (pts[0][0] + pts[1][0]).toUpperCase();
+    }
+    return pts[0][0].toUpperCase();
   }
 
   Widget _detailRow(String label, String value) {
@@ -371,7 +393,6 @@ class _AdminEmployeeTabState extends State<AdminEmployeeTab> with SingleTickerPr
                         separatorBuilder: (_, __) => const SizedBox(height: 12),
                         itemBuilder: (_, i) {
                           final e = _employees[i] as Map<String, dynamic>;
-                          final initial = (e['name'] ?? 'K').substring(0, 1).toUpperCase();
                           return GestureDetector(
                             onTap: () => _showDetail(e),
                             child: Container(
@@ -387,10 +408,23 @@ class _AdminEmployeeTabState extends State<AdminEmployeeTab> with SingleTickerPr
                                     width: 50,
                                     height: 50,
                                     decoration: BoxDecoration(
-                                      gradient: const LinearGradient(colors: [Color(0xFF1E3A8A), Color(0xFF2563EB)], begin: Alignment.topLeft, end: Alignment.bottomRight),
+                                      color: const Color(0xFF2563EB).withOpacity(0.08),
                                       borderRadius: BorderRadius.circular(14),
+                                      image: (e['photo_url'] != null && e['photo_url'].toString().isNotEmpty)
+                                          ? DecorationImage(
+                                              image: NetworkImage('${AppConstants.baseUrl}${e['photo_url']}'),
+                                              fit: BoxFit.cover,
+                                            )
+                                          : null,
                                     ),
-                                    child: Center(child: Text(initial, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 20))),
+                                    child: (e['photo_url'] == null || e['photo_url'].toString().isEmpty)
+                                        ? Center(
+                                            child: Text(
+                                              _getInitials(e['name'] ?? 'Karyawan'),
+                                              style: const TextStyle(color: Color(0xFF2563EB), fontWeight: FontWeight.bold, fontSize: 18),
+                                            ),
+                                          )
+                                        : null,
                                   ),
                                   const SizedBox(width: 16),
                                   Expanded(
