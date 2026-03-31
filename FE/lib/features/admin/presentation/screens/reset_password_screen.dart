@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:pinput/pinput.dart';
+import 'package:front_end/features/common/widgets/app_dialog.dart';
 import 'package:front_end/features/common/widgets/app_text_field.dart';
 import 'package:front_end/features/common/widgets/wavy_background.dart';
 import 'package:front_end/core/utils/error_mapper.dart';
@@ -27,15 +29,15 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
     final confirm = _confirmPassword.text;
 
     if (otp.length != 6) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('OTP harus 6 digit')));
+      AppDialog.showError(context, 'OTP harus 6 digit');
       return;
     }
     if (pass.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Kata sandi baru wajib diisi')));
+      AppDialog.showError(context, 'Kata sandi baru wajib diisi');
       return;
     }
     if (pass != confirm) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Konfirmasi kata sandi tidak cocok')));
+      AppDialog.showError(context, 'Konfirmasi kata sandi tidak cocok');
       return;
     }
 
@@ -47,10 +49,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
         newPassword: pass,
       );
       if (!mounted) return;
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Kata sandi berhasil diperbarui. Silakan login.')),
-      );
+      AppDialog.showSuccess(context, 'Kata sandi berhasil diperbarui. Silakan login.');
 
       Navigator.pushAndRemoveUntil(
         context,
@@ -59,9 +58,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(ErrorMapper.map(e))),
-      );
+      AppDialog.showError(context, ErrorMapper.map(e));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -110,13 +107,26 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                     Pinput(
                       controller: _otp,
                       length: 6,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                       defaultPinTheme: PinTheme(
-                        width: 42,
-                        height: 52,
+                        width: 45,
+                        height: 50,
+                        textStyle: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF1E3A8A)),
                         decoration: BoxDecoration(
-                          color: Colors.grey.shade100,
+                          color: const Color(0xFFF8FAFC),
                           borderRadius: BorderRadius.circular(10),
                           border: Border.all(color: Colors.grey.shade300),
+                        ),
+                      ),
+                      focusedPinTheme: PinTheme(
+                        width: 45,
+                        height: 50,
+                        textStyle: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF2563EB)),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          border: Border.all(color: const Color(0xFF2563EB), width: 2),
+                          borderRadius: BorderRadius.circular(10),
                         ),
                       ),
                     ),

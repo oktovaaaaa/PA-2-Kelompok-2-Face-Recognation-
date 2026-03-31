@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../../../core/network/api_client.dart';
 import '../../../../../core/utils/currency_formatter.dart';
+import '../../../../common/widgets/app_dialog.dart';
 
 class AdminPositionTab extends StatefulWidget {
   const AdminPositionTab({super.key});
@@ -101,10 +102,7 @@ class _AdminPositionTabState extends State<AdminPositionTab> {
                     }
                     _loadPositions();
                     if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(isEdit ? 'Jabatan diperbarui' : 'Jabatan ditambahkan'),
-                            backgroundColor: Colors.green),
-                      );
+                      AppDialog.showSuccess(context, isEdit ? 'Jabatan diperbarui' : 'Jabatan ditambahkan');
                     }
                   } catch (_) {}
                 },
@@ -118,33 +116,23 @@ class _AdminPositionTabState extends State<AdminPositionTab> {
   }
 
   Future<void> _deletePosition(String id, String name) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Hapus Jabatan', style: TextStyle(fontWeight: FontWeight.bold)),
-        content: Text('Hapus jabatan "$name"? Jabatan yang masih digunakan karyawan tidak dapat dihapus.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Batal')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Hapus'),
-          ),
-        ],
-      ),
+    final confirmed = await AppDialog.showConfirm(
+      context,
+      title: 'Hapus Jabatan',
+      message: 'Hapus jabatan "$name"? Jabatan yang masih digunakan karyawan tidak dapat dihapus.',
+      confirmText: 'Ya, Hapus',
+      confirmColor: Colors.red,
     );
     if (confirmed != true) return;
     try {
       final res = await ApiClient.delete('/api/admin/positions/$id');
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(res.success ? 'Jabatan dihapus' : (res.message ?? 'Gagal menghapus jabatan')),
-          backgroundColor: res.success ? Colors.green : Colors.red,
-        ),
-      );
-      if (res.success) _loadPositions();
+      if (res.success) {
+        AppDialog.showSuccess(context, 'Jabatan dihapus');
+        _loadPositions();
+      } else {
+        AppDialog.showError(context, res.message ?? 'Gagal menghapus jabatan');
+      }
     } catch (_) {}
   }
 

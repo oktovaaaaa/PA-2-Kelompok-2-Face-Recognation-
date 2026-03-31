@@ -5,8 +5,9 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import '../../../../core/utils/error_mapper.dart';
 import '../../data/auth_repository.dart';
 import 'register_employee_screen.dart';
-import '../../../common/widgets/app_text_field.dart';
 import '../../../common/widgets/primary_button.dart';
+import '../../../common/widgets/app_text_field.dart';
+import '../../../common/widgets/app_dialog.dart';
 
 class BarcodeScannerScreen extends StatefulWidget {
   const BarcodeScannerScreen({super.key});
@@ -45,7 +46,7 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
     } catch (e) {
       final msg = ErrorMapper.map(e);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      AppDialog.showError(context, msg);
     } finally {
       if (mounted) {
         setState(() {

@@ -6,6 +6,7 @@ import '../../../common/widgets/app_text_field.dart';
 import '../../../common/widgets/primary_button.dart';
 import '../../data/auth_repository.dart';
 import 'register_employee_screen.dart';
+import '../../../common/widgets/app_dialog.dart';
 
 class ValidateInviteScreen extends StatefulWidget {
   const ValidateInviteScreen({super.key});
@@ -38,7 +39,7 @@ class _ValidateInviteScreenState extends State<ValidateInviteScreen> {
     } catch (e) {
       final msg = ErrorMapper.map(e);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      AppDialog.showError(context, msg);
     } finally {
       if (mounted) setState(() => _loading = false);
     }

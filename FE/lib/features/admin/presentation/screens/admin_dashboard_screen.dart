@@ -18,14 +18,19 @@ class AdminDashboardScreen extends StatefulWidget {
 
 class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   int _currentIndex = 0;
+  late final List<Widget> _tabs;
 
-  final List<Widget> _tabs = const [
-    AdminHomeTab(),
-    AdminLeaveTab(),
-    AdminPositionTab(),
-    AdminEmployeeTab(),
-    AdminProfileTab(),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _tabs = [
+      AdminHomeTab(onNavigate: (i) => setState(() => _currentIndex = i)),
+      const AdminLeaveTab(),
+      const AdminPositionTab(),
+      const AdminEmployeeTab(),
+      const AdminProfileTab(),
+    ];
+  }
 
   Future<void> _logout() async {
     final act = await showDialog<bool>(

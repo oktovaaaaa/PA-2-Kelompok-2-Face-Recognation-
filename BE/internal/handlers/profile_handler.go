@@ -43,13 +43,14 @@ func GetMyProfile(c *gin.Context) {
 		PhotoURL:   user.PhotoURL,
 		Role:       user.Role,
 		Status:     user.Status,
-		PositionID: user.PositionID,
+		PositionID: "",
 		CompanyID:  user.CompanyID,
 	}
 
-	if user.PositionID != "" {
+	if user.PositionID != nil {
+		resp.PositionID = *user.PositionID
 		var pos models.Position
-		if err := database.DB.Where("id = ?", user.PositionID).First(&pos).Error; err == nil {
+		if err := database.DB.Where("id = ?", *user.PositionID).First(&pos).Error; err == nil {
 			resp.PositionName = pos.Name
 			resp.Salary = pos.Salary
 		}

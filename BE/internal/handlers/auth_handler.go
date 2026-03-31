@@ -22,6 +22,7 @@ func RegisterAdmin(c *gin.Context) {
 		BirthPlace string
 		BirthDate  string
 		Address    string
+		PhotoURL   string
 
 		CompanyName    string
 		CompanyAddress string
@@ -29,6 +30,7 @@ func RegisterAdmin(c *gin.Context) {
 		CompanyPhone   string
 
 		GoogleIDToken string
+		OTPCode       string
 	}
 
 	if err := c.ShouldBindJSON(&body); err != nil {
@@ -46,6 +48,7 @@ func RegisterAdmin(c *gin.Context) {
 		BirthPlace: body.BirthPlace,
 		BirthDate:  body.BirthDate,
 		Address:    body.Address,
+		PhotoURL:   body.PhotoURL,
 	}
 
 	if body.GoogleIDToken != "" {
@@ -55,6 +58,16 @@ func RegisterAdmin(c *gin.Context) {
 			user.GoogleID = payload.Subject
 		} else {
 			utils.Error(c, "Token Google tidak valid: "+err.Error())
+			return
+		}
+	} else {
+		// Verifikasi OTP untuk pendaftaran email biasa
+		if body.OTPCode == "" {
+			utils.Error(c, "Kode OTP wajib diisi")
+			return
+		}
+		if err := services.VerifyOTP(body.Email, body.OTPCode); err != nil {
+			utils.Error(c, "Kode OTP tidak valid atau kedaluwarsa")
 			return
 		}
 	}

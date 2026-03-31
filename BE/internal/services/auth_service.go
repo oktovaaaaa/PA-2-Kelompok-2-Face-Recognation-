@@ -24,13 +24,27 @@ func RegisterAdmin(user models.User, company models.Company) error {
 	hashPassword, _ := utils.HashPassword(user.Password)
 	hashPin, _ := utils.HashPin(user.Pin)
 
+	// 1. Create Company
 	company.ID = uuid.New().String()
 	if err := database.DB.Create(&company).Error; err != nil {
 		return err
 	}
 
+	// 2. Create Default Position (Owner) for this company
+	ownerPosition := models.Position{
+		ID:        uuid.New().String(),
+		CompanyID: company.ID,
+		Name:      "Owner",
+		Salary:    0,
+	}
+	if err := database.DB.Create(&ownerPosition).Error; err != nil {
+		return err
+	}
+
+	// 3. Create Admin User
 	user.ID = uuid.New().String()
 	user.CompanyID = company.ID
+	user.PositionID = &ownerPosition.ID // Assign the address of the ID
 	user.Password = hashPassword
 	user.Pin = hashPin
 	user.Role = "ADMIN"

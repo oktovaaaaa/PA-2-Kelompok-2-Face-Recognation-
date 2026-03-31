@@ -10,7 +10,7 @@ type User struct {
 	CompanyID string  `json:"company_id"`
 	Company   Company `gorm:"foreignKey:CompanyID" json:"company"`
 
-	PositionID string   `json:"position_id"`
+	PositionID *string   `json:"position_id"`
 	Position   Position `gorm:"foreignKey:PositionID" json:"position"`
 
 	Name     string `json:"name"`

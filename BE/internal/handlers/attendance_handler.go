@@ -264,6 +264,40 @@ func UpdateAttendanceSettings(c *gin.Context) {
 	utils.Success(c, "Pengaturan absensi berhasil diperbarui", settings)
 }
 
+// AdminGetDashboardSummary — ringkasan status absensi hari ini untuk dashboard admin
+func AdminGetDashboardSummary(c *gin.Context) {
+	userCtx, _ := c.Get("user")
+	admin := userCtx.(models.User)
+	today := time.Now().Format("2006-01-02")
+
+	var present, late, leave, sick int64
+
+	// Hitung semua status dari Tabel Attendance hari ini
+	database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date = ? AND status = ?", admin.CompanyID, today, "PRESENT").Count(&present)
+	database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date = ? AND status = ?", admin.CompanyID, today, "LATE").Count(&late)
+	database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date = ? AND status = ?", admin.CompanyID, today, "LEAVE").Count(&leave)
+	database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date = ? AND status = ?", admin.CompanyID, today, "SICK").Count(&sick)
+
+	// Hitung Total Karyawan Aktif
+	var totalEmployees int64
+	database.DB.Model(&models.User{}).Where("company_id = ? AND status = ? AND role = ?", admin.CompanyID, "ACTIVE", "EMPLOYEE").Count(&totalEmployees)
+
+	// Hitung Alpha (Sisa karyawan yang belum absen sama sekali)
+	absentCount := totalEmployees - (present + late + leave + sick)
+	if absentCount < 0 {
+		absentCount = 0
+	}
+
+	utils.Success(c, "Dashboard summary", gin.H{
+		"present": present,
+		"late":    late,
+		"absent":  absentCount,
+		"leave":   leave,
+		"sick":    sick,
+		"total":   totalEmployees,
+	})
+}
+
 // ===== HELPER FUNCTIONS =====
 
 // isTimeInRange mengecek apakah waktu now berada di antara start dan end (format "HH:MM")

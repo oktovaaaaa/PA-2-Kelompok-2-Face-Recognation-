@@ -1,11 +1,16 @@
 // lib/features/admin/presentation/screens/tabs/admin_profile_tab.dart
 
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../../../../core/network/api_client.dart';
 import '../../../../../core/storage/session_storage.dart';
 import 'package:flutter/services.dart';
 import '../../../../../core/utils/currency_formatter.dart';
 import 'package:front_end/features/auth/presentation/screens/landing_screen.dart';
+import '../../../../common/widgets/app_text_field.dart';
+import '../../../../common/widgets/app_dialog.dart';
+import '../../../../../core/constants/app_constants.dart';
 
 class AdminProfileTab extends StatefulWidget {
   const AdminProfileTab({super.key});
@@ -19,6 +24,7 @@ class _AdminProfileTabState extends State<AdminProfileTab> {
   Map<String, dynamic>? _company;
   Map<String, dynamic>? _settings;
   bool _loading = true;
+  File? _imageFile;
 
   @override
   void initState() {
@@ -27,38 +33,18 @@ class _AdminProfileTabState extends State<AdminProfileTab> {
   }
 
   Future<void> _logout() async {
-    final act = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Keluar', style: TextStyle(fontWeight: FontWeight.bold)),
-        content: const Text('Apakah Anda yakin ingin keluar dari aplikasi?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Batal'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red.shade600,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Keluar'),
-          ),
-        ],
-      ),
+    final act = await AppDialog.showConfirm(
+      context,
+      title: 'Keluar Aplikasi',
+      message: 'Apakah Anda yakin ingin keluar dari sesi ini?',
+      confirmText: 'Ya, Keluar',
+      confirmColor: Colors.red.shade600,
     );
 
     if (act != true) return;
     await SessionStorage.clear();
     if (!mounted) return;
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (_) => const LandingScreen()),
-      (_) => false,
-    );
+    Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const LandingScreen()), (_) => false);
   }
 
   Future<void> _load() async {
@@ -79,6 +65,42 @@ class _AdminProfileTabState extends State<AdminProfileTab> {
     }
   }
 
+  Future<void> _pickImage() async {
+    final pickedFile = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 50);
+    if (pickedFile != null) {
+      final file = File(pickedFile.path);
+      setState(() => _loading = true);
+      try {
+        final uploadRes = await ApiClient.uploadFile(file);
+        if (uploadRes.status) {
+          final photoUrl = uploadRes.data['url'];
+          // Update profile dengan photo_url baru
+          await ApiClient.put('/api/profile', {
+            'name': _profile?['name'] ?? '',
+            'phone': _profile?['phone'] ?? '',
+            'birth_place': _profile?['birth_place'] ?? '',
+            'birth_date': _profile?['birth_date'] ?? '',
+            'address': _profile?['address'] ?? '',
+            'photo_url': photoUrl,
+          });
+          setState(() {
+            _imageFile = file;
+            if (_profile != null) {
+              _profile!['photo_url'] = photoUrl;
+            }
+          });
+          if (mounted) {
+            AppDialog.showSuccess(context, 'Foto profil berhasil diperbarui.');
+          }
+        }
+      } catch (e) {
+        if (mounted) AppDialog.showError(context, 'Gagal memperbarui foto: $e');
+      } finally {
+        if (mounted) setState(() => _loading = false);
+      }
+    }
+  }
+
   void _editProfile() {
     final nameCtrl = TextEditingController(text: _profile?['name'] ?? '');
     final phoneCtrl = TextEditingController(text: _profile?['phone'] ?? '');
@@ -89,30 +111,101 @@ class _AdminProfileTabState extends State<AdminProfileTab> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.only(left: 20, right: 20, top: 20, bottom: MediaQuery.of(ctx).viewInsets.bottom + 20),
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+        padding: EdgeInsets.only(left: 24, right: 24, top: 24, bottom: MediaQuery.of(ctx).viewInsets.bottom + 24),
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Edit Data Diri', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Edit Data Diri', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: Color(0xFF0F172A))),
+                  IconButton(onPressed: () => Navigator.pop(ctx), icon: const Icon(Icons.close_rounded)),
+                ],
+              ),
+              const SizedBox(height: 24),
+              // Tambahkan Picker di dalam modal
+              Center(
+                child: GestureDetector(
+                  onTap: () async {
+                    Navigator.pop(ctx); // Tutup modal dulu
+                    _pickImage(); // Jalankan picker
+                  },
+                  child: Stack(
+                    children: [
+                      Container(
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(color: const Color(0xFF2563EB).withOpacity(0.1), width: 4),
+                        ),
+                        child: CircleAvatar(
+                          radius: 40,
+                          backgroundColor: const Color(0xFFF1F5F9),
+                          backgroundImage: (_profile?['photo_url'] != null && _profile!['photo_url'].toString().isNotEmpty)
+                              ? NetworkImage('${AppConstants.baseUrl}${_profile!['photo_url']}')
+                              : null,
+                          child: (_profile?['photo_url'] == null || _profile!['photo_url'].toString().isEmpty)
+                              ? const Icon(Icons.person_rounded, size: 40, color: Color(0xFF94A3B8))
+                              : null,
+                        ),
+                      ),
+                      const Positioned(
+                        bottom: 0,
+                        right: 0,
+                        child: CircleAvatar(
+                          radius: 12,
+                          backgroundColor: Color(0xFF2563EB),
+                          child: Icon(Icons.camera_alt_rounded, size: 14, color: Colors.white),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+              AppTextField(controller: nameCtrl, label: 'Nama Lengkap', prefixIcon: Icons.person_outline_rounded),
               const SizedBox(height: 16),
-              _buildField(nameCtrl, 'Nama Lengkap', Icons.person_rounded),
-              _buildField(phoneCtrl, 'Nomor Telepon', Icons.phone_rounded, keyboardType: TextInputType.phone),
-              _buildField(birthPlaceCtrl, 'Tempat Lahir', Icons.location_city_rounded),
-              _buildField(birthDateCtrl, 'Tanggal Lahir (YYYY-MM-DD)', Icons.calendar_today_rounded),
-              _buildField(addressCtrl, 'Alamat', Icons.home_rounded, maxLines: 2),
+              AppTextField(controller: phoneCtrl, label: 'Nomor Telepon', prefixIcon: Icons.phone_android_rounded, keyboardType: TextInputType.phone),
               const SizedBox(height: 16),
+              AppTextField(controller: birthPlaceCtrl, label: 'Tempat Lahir', prefixIcon: Icons.location_city_outlined),
+              const SizedBox(height: 16),
+              AppTextField(
+                controller: birthDateCtrl, 
+                label: 'Tanggal Lahir', 
+                prefixIcon: Icons.calendar_today_outlined,
+                readOnly: true,
+                onTap: () async {
+                  final initial = DateTime.tryParse(birthDateCtrl.text) ?? DateTime(2000, 1, 1);
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: initial,
+                    firstDate: DateTime(1950),
+                    lastDate: DateTime.now(),
+                    builder: (context, child) {
+                      return Theme(data: Theme.of(context).copyWith(colorScheme: const ColorScheme.light(primary: Color(0xFF2563EB))), child: child!);
+                    },
+                  );
+                  if (picked != null) {
+                    birthDateCtrl.text = picked.toString().substring(0, 10);
+                  }
+                },
+              ),
+              const SizedBox(height: 16),
+              AppTextField(controller: addressCtrl, label: 'Alamat', prefixIcon: Icons.home_outlined, maxLines: 2),
+              const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF4D64F5),
+                    backgroundColor: const Color(0xFF2563EB),
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    elevation: 0,
                   ),
                   onPressed: () async {
                     Navigator.pop(ctx);
@@ -124,13 +217,14 @@ class _AdminProfileTabState extends State<AdminProfileTab> {
                       'address': addressCtrl.text.trim(),
                     });
                     if (!mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                      content: Text(res.success ? 'Profil diperbarui' : (res.message ?? 'Gagal')),
-                      backgroundColor: res.success ? Colors.green : Colors.red,
-                    ));
+                    if (res.success) {
+                      AppDialog.showSuccess(context, 'Profil Berhasil Diperbarui');
+                    } else {
+                      AppDialog.showError(context, res.message ?? 'Gagal memperbarui profil');
+                    }
                     if (res.success) _load();
                   },
-                  child: const Text('Simpan'),
+                  child: const Text('Simpan Perubahan', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                 ),
               ),
             ],
@@ -149,29 +243,30 @@ class _AdminProfileTabState extends State<AdminProfileTab> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.only(left: 20, right: 20, top: 20, bottom: MediaQuery.of(ctx).viewInsets.bottom + 20),
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+        padding: EdgeInsets.only(left: 24, right: 24, top: 24, bottom: MediaQuery.of(ctx).viewInsets.bottom + 24),
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Edit Data Perusahaan', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-              const SizedBox(height: 16),
-              _buildField(nameCtrl, 'Nama Perusahaan', Icons.business_rounded),
-              _buildField(addressCtrl, 'Alamat Perusahaan', Icons.location_on_rounded, maxLines: 2),
-              _buildField(emailCtrl, 'Email Perusahaan', Icons.email_rounded, keyboardType: TextInputType.emailAddress),
-              _buildField(phoneCtrl, 'Telepon Perusahaan', Icons.phone_rounded, keyboardType: TextInputType.phone),
-              const SizedBox(height: 16),
+              const Text('Data Perusahaan', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: Color(0xFF0F172A))),
+              const SizedBox(height: 24),
+              _buildField(nameCtrl, 'Nama Perusahaan', Icons.business_outlined),
+              _buildField(addressCtrl, 'Alamat Lengkap', Icons.map_outlined, maxLines: 2),
+              _buildField(emailCtrl, 'Email Resmi', Icons.alternate_email_rounded, keyboardType: TextInputType.emailAddress),
+              _buildField(phoneCtrl, 'Telepon Kantor', Icons.phone_outlined, keyboardType: TextInputType.phone),
+              const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF4D64F5),
+                    backgroundColor: const Color(0xFF0F172A),
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                   ),
                   onPressed: () async {
                     Navigator.pop(ctx);
@@ -182,13 +277,14 @@ class _AdminProfileTabState extends State<AdminProfileTab> {
                       'Phone': phoneCtrl.text.trim(),
                     });
                     if (!mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                      content: Text(res.success ? 'Data perusahaan diperbarui' : (res.message ?? 'Gagal')),
-                      backgroundColor: res.success ? Colors.green : Colors.red,
-                    ));
+                    if (res.success) {
+                      AppDialog.showSuccess(context, 'Instansi Berhasil Diperbarui');
+                    } else {
+                      AppDialog.showError(context, res.message ?? 'Gagal memperbarui instansi');
+                    }
                     if (res.success) _load();
                   },
-                  child: const Text('Simpan'),
+                  child: const Text('Update Instansi', style: TextStyle(fontWeight: FontWeight.bold)),
                 ),
               ),
             ],
@@ -211,53 +307,47 @@ class _AdminProfileTabState extends State<AdminProfileTab> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.only(left: 20, right: 20, top: 20, bottom: MediaQuery.of(ctx).viewInsets.bottom + 20),
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+        padding: EdgeInsets.only(left: 24, right: 24, top: 24, bottom: MediaQuery.of(ctx).viewInsets.bottom + 24),
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Pengaturan Absensi', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-              const SizedBox(height: 4),
-              Text('Format waktu: HH:MM (contoh: 07:00)', style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
-              const SizedBox(height: 16),
-              const Text('Jam Check-In', style: TextStyle(fontWeight: FontWeight.w600)),
-              const SizedBox(height: 8),
+              const Text('Jam Operasional', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: Color(0xFF0F172A))),
+              const SizedBox(height: 24),
+              const Text('Absensi Masuk', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey)),
+              const SizedBox(height: 12),
               Row(
                 children: [
-                  Expanded(child: _buildField(checkInStartCtrl, 'Mulai', Icons.login_rounded)),
-                  const SizedBox(width: 12),
-                  Expanded(child: _buildField(checkInEndCtrl, 'Selesai', Icons.login_rounded)),
+                  Expanded(child: _buildField(checkInStartCtrl, 'Mulai', Icons.access_time_rounded)),
+                  const SizedBox(width: 16),
+                  Expanded(child: _buildField(checkInEndCtrl, 'Selesai', Icons.timer_off_outlined)),
                 ],
               ),
-              const SizedBox(height: 8),
-              const Text('Jam Check-Out', style: TextStyle(fontWeight: FontWeight.w600)),
-              const SizedBox(height: 8),
+              const Text('Absensi Pulang', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey)),
+              const SizedBox(height: 12),
               Row(
                 children: [
-                  Expanded(child: _buildField(checkOutStartCtrl, 'Mulai', Icons.logout_rounded)),
-                  const SizedBox(width: 12),
-                  Expanded(child: _buildField(checkOutEndCtrl, 'Selesai', Icons.logout_rounded)),
+                  Expanded(child: _buildField(checkOutStartCtrl, 'Mulai', Icons.access_time_rounded)),
+                  const SizedBox(width: 16),
+                  Expanded(child: _buildField(checkOutEndCtrl, 'Selesai', Icons.timer_off_outlined)),
                 ],
               ),
-              const SizedBox(height: 8),
-              _buildField(penaltyCtrl, 'Denda Alpha per Hari (Rp)', Icons.money_off_rounded,
+              _buildField(penaltyCtrl, 'Denda Alpha (Rp)', Icons.payments_outlined,
                   keyboardType: TextInputType.number,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.digitsOnly,
-                    CurrencyInputFormatter(),
-                  ]),
-              const SizedBox(height: 16),
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly, CurrencyInputFormatter()]),
+              const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF4D64F5),
+                    backgroundColor: const Color(0xFF2563EB),
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                   ),
                   onPressed: () async {
                     Navigator.pop(ctx);
@@ -269,13 +359,14 @@ class _AdminProfileTabState extends State<AdminProfileTab> {
                       'alpha_penalty': CurrencyInputFormatter.unformat(penaltyCtrl.text.trim()).toDouble(),
                     });
                     if (!mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                      content: Text(res.success ? 'Pengaturan disimpan' : (res.message ?? 'Gagal')),
-                      backgroundColor: res.success ? Colors.green : Colors.red,
-                    ));
+                    if (res.success) {
+                      AppDialog.showSuccess(context, 'Pengaturan Tersimpan');
+                    } else {
+                      AppDialog.showError(context, res.message ?? 'Gagal menyimpan pengaturan');
+                    }
                     if (res.success) _load();
                   },
-                  child: const Text('Simpan Pengaturan'),
+                  child: const Text('Simpan Pengaturan', style: TextStyle(fontWeight: FontWeight.bold)),
                 ),
               ),
             ],
@@ -286,20 +377,31 @@ class _AdminProfileTabState extends State<AdminProfileTab> {
   }
 
   Widget _buildField(TextEditingController ctrl, String label, IconData icon,
-      {TextInputType? keyboardType, int maxLines = 1, List<TextInputFormatter>? inputFormatters}) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: TextField(
-        controller: ctrl,
-        keyboardType: keyboardType,
-        maxLines: maxLines,
-        inputFormatters: inputFormatters,
-        decoration: InputDecoration(
-          labelText: label,
-          prefixIcon: Icon(icon),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+      {TextInputType? keyboardType, int maxLines = 1, List<TextInputFormatter>? inputFormatters, bool readOnly = false, VoidCallback? onTap}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF64748B))),
+        const SizedBox(height: 8),
+        TextField(
+          controller: ctrl,
+          keyboardType: keyboardType,
+          maxLines: maxLines,
+          readOnly: readOnly,
+          onTap: onTap,
+          inputFormatters: inputFormatters,
+          decoration: InputDecoration(
+            prefixIcon: Icon(icon, color: const Color(0xFF64748B), size: 20),
+            filled: true,
+            fillColor: const Color(0xFFF8FAFC),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade200)),
+            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade200)),
+            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.5)),
+            contentPadding: const EdgeInsets.symmetric(vertical: 16),
+          ),
         ),
-      ),
+        const SizedBox(height: 16),
+      ],
     );
   }
 
@@ -312,198 +414,186 @@ class _AdminProfileTabState extends State<AdminProfileTab> {
     return '-';
   }
 
+  String _getInitials(String name) {
+    if (name.trim().isEmpty) return '?';
+    final pts = name.trim().split(RegExp(r'\s+'));
+    if (pts.length >= 2) {
+      return (pts[0][0] + pts[1][0]).toUpperCase();
+    }
+    return pts[0][0].toUpperCase();
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) return const Center(child: CircularProgressIndicator(color: Color(0xFF2563EB)));
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.light.copyWith(
-        statusBarColor: Colors.transparent,
-      ),
+      value: SystemUiOverlayStyle.light.copyWith(statusBarColor: Colors.transparent),
       child: Scaffold(
         backgroundColor: const Color(0xFFF8FAFC),
         body: Column(
           children: [
-            // Premium Header
+            // Header Premium
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.only(top: 64, left: 24, right: 24, bottom: 28),
+              padding: const EdgeInsets.only(top: 64, left: 24, right: 24, bottom: 40),
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
                   colors: [Color(0xFF0F172A), Color(0xFF1E3A8A), Color(0xFF2563EB)],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
-                borderRadius: BorderRadius.only(
-                  bottomLeft: Radius.circular(32),
-                  bottomRight: Radius.circular(32),
-                ),
+                borderRadius: BorderRadius.only(bottomLeft: Radius.circular(40), bottomRight: Radius.circular(40)),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              child: Row(
                 children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: 52,
-                        height: 52,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white.withOpacity(0.4), width: 2),
+                  GestureDetector(
+                    onTap: _pickImage,
+                    child: Stack(
+                      children: [
+                        Container(
+                          width: 70,
+                          height: 70,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.15),
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white.withOpacity(0.3), width: 2),
+                            image: (_profile?['photo_url'] != null && _profile!['photo_url'].toString().isNotEmpty)
+                                ? DecorationImage(
+                                    image: NetworkImage('${AppConstants.baseUrl}${_profile!['photo_url']}'),
+                                    fit: BoxFit.cover,
+                                  )
+                                : null,
+                          ),
+                          child: (_profile?['photo_url'] == null || _profile!['photo_url'].toString().isEmpty)
+                              ? Center(
+                                  child: Text(
+                                    _getInitials(_profile?['name'] ?? 'Admin'),
+                                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 24),
+                                  ),
+                                )
+                              : null,
                         ),
-                        child: Center(
-                          child: Text(
-                            (_profile?['name'] ?? 'A').substring(0, 1).toUpperCase(),
-                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 22),
+                        Positioned(
+                          bottom: 0,
+                          right: 0,
+                          child: Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                            child: const Icon(Icons.camera_alt_rounded, size: 14, color: Color(0xFF2563EB)),
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(_profile?['name'] ?? 'Admin', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 18)),
-                            Text(_profile?['email'] ?? '', style: TextStyle(color: Colors.white.withOpacity(0.75), fontSize: 13)),
-                          ],
-                        ),
-                      ),
-                      GestureDetector(
-                        onTap: _logout,
-                        child: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(color: Colors.white.withOpacity(0.15), borderRadius: BorderRadius.circular(10)),
-                          child: const Icon(Icons.logout_rounded, color: Colors.white, size: 22),
-                        ),
-                      ),
-                    ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 20),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(_profile?['name'] ?? 'Admin', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 22)),
+                        const SizedBox(height: 4),
+                        Text(_profile?['email'] ?? '', style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 13)),
+                      ],
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: _logout,
+                    child: Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(color: Colors.white.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
+                      child: const Icon(Icons.logout_rounded, color: Colors.white, size: 24),
+                    ),
                   ),
                 ],
               ),
             ),
   
-            // Content
             Expanded(
-              child: RefreshIndicator(
-                color: const Color(0xFF2563EB),
-                onRefresh: _load,
-                child: ListView(
-                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
-                  children: [
-                    _buildCard(
-                      title: 'Data Diri',
-                      icon: Icons.person_rounded,
-                      color: const Color(0xFF2563EB),
-                      onEdit: _editProfile,
-                      rows: [
-                        _infoRow('Nama', _val(_profile, ['name'])),
-                        _infoRow('Email', _val(_profile, ['email'])),
-                        _infoRow('Telepon', _val(_profile, ['phone'])),
-                        _infoRow('Tempat Lahir', _val(_profile, ['birth_place'])),
-                        _infoRow('Tgl Lahir', _val(_profile, ['birth_date'])),
-                        _infoRow('Alamat', _val(_profile, ['address'])),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    _buildCard(
-                      title: 'Data Perusahaan',
-                      icon: Icons.business_rounded,
-                      color: const Color(0xFF1E3A8A),
-                      onEdit: _editCompany,
-                      rows: [
-                        _infoRow('Nama', _val(_company, ['Name', 'name'])),
-                        _infoRow('Alamat', _val(_company, ['Address', 'address'])),
-                        _infoRow('Email', _val(_company, ['Email', 'email'])),
-                        _infoRow('Telepon', _val(_company, ['Phone', 'phone'])),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    _buildCard(
-                      title: 'Pengaturan Absensi',
-                      icon: Icons.schedule_rounded,
-                      color: const Color(0xFF0F172A),
-                      onEdit: _editAttendanceSettings,
-                      rows: [
-                        _infoRow('Check-In', '${_val(_settings, ['check_in_start'])} – ${_val(_settings, ['check_in_end'])}'),
-                        _infoRow('Check-Out', '${_val(_settings, ['check_out_start'])} – ${_val(_settings, ['check_out_end'])}'),
-                        _infoRow('Denda Alpha', 'Rp ${CurrencyInputFormatter.formatNumber((_settings?['alpha_penalty'] as num?)?.toInt() ?? 0)}'),
-                      ],
-                    ),
-                  ],
-                ),
+              child: ListView(
+                padding: const EdgeInsets.all(24),
+                children: [
+                  _buildDataCard(
+                    title: 'Data Diri',
+                    icon: Icons.badge_outlined,
+                    color: const Color(0xFF2563EB),
+                    onEdit: _editProfile,
+                    rows: [
+                      _infoRow('Nama', _val(_profile, ['name'])),
+                      _infoRow('Email', _val(_profile, ['email'])),
+                      _infoRow('Telepon', _val(_profile, ['phone'])),
+                      _infoRow('Tempat Lahir', _val(_profile, ['birth_place'])),
+                      _infoRow('Tgl Lahir', _val(_profile, ['birth_date'])),
+                      _infoRow('Alamat', _val(_profile, ['address'])),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  _buildDataCard(
+                    title: 'Data Perusahaan',
+                    icon: Icons.business_center_outlined,
+                    color: const Color(0xFF1E3A8A),
+                    onEdit: _editCompany,
+                    rows: [
+                      _infoRow('Nama', _val(_company, ['Name', 'name'])),
+                      _infoRow('Instansi', _val(_company, ['Address', 'address'])),
+                      _infoRow('Kontak', _val(_company, ['Phone', 'phone'])),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  _buildDataCard(
+                    title: 'Operasional',
+                    icon: Icons.timer_outlined,
+                    color: const Color(0xFF0F172A),
+                    onEdit: _editAttendanceSettings,
+                    rows: [
+                      _infoRow('Check-In', '${_val(_settings, ['check_in_start'])} - ${_val(_settings, ['check_in_end'])}'),
+                      _infoRow('Check-Out', '${_val(_settings, ['check_out_start'])} - ${_val(_settings, ['check_out_end'])}'),
+                      _infoRow('Sanksi Alpha', 'Rp ${CurrencyInputFormatter.formatNumber((_settings?['alpha_penalty'] as num?)?.toInt() ?? 0)}'),
+                    ],
+                  ),
+                ],
               ),
             ),
           ],
         ),
       ),
     );
-
   }
 
-  Widget _buildCard({
-    required String title,
-    required IconData icon,
-    required Color color,
-    required VoidCallback onEdit,
-    required List<Widget> rows,
-  }) {
+  Widget _buildDataCard({required String title, required IconData icon, required Color color, required VoidCallback onEdit, required List<Widget> rows}) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 12, offset: const Offset(0, 4))],
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 20, offset: const Offset(0, 10))],
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(20),
+            child: Row(
               children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
-                  child: Icon(icon, color: color, size: 20),
-                ),
-                const SizedBox(width: 12),
-                Expanded(child: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF0F172A)))),
-                GestureDetector(
-                  onTap: onEdit,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(color: color.withOpacity(0.08), borderRadius: BorderRadius.circular(20)),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.edit_rounded, color: color, size: 14),
-                        const SizedBox(width: 4),
-                        Text('Edit', style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.bold)),
-                      ],
-                    ),
-                  ),
-                ),
+                Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(14)), child: Icon(icon, color: color, size: 24)),
+                const SizedBox(width: 16),
+                Expanded(child: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF0F172A)))),
+                IconButton(onPressed: onEdit, icon: Icon(Icons.edit_note_rounded, color: color, size: 28)),
               ],
             ),
-            const SizedBox(height: 16),
-            Divider(color: Colors.grey.shade100, height: 1),
-            const SizedBox(height: 12),
-            ...rows,
-          ],
-        ),
+          ),
+          const Divider(height: 1),
+          Padding(padding: const EdgeInsets.all(20), child: Column(children: rows)),
+        ],
       ),
     );
   }
 
   Widget _infoRow(String label, String value) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 5),
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(width: 100, child: Text(label, style: TextStyle(color: Colors.grey.shade500, fontSize: 13))),
-          const Text(': ', style: TextStyle(color: Colors.grey)),
-          Expanded(child: Text(value, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Color(0xFF0F172A)))),
+          SizedBox(width: 100, child: Text(label, style: TextStyle(color: Colors.grey.shade500, fontSize: 14))),
+          Expanded(child: Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF334155)))),
         ],
       ),
     );

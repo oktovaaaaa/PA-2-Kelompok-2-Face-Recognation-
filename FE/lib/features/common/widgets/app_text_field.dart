@@ -8,6 +8,11 @@ class AppTextField extends StatefulWidget {
   final TextInputType? keyboardType;
   final String? Function(String?)? validator;
   final List<TextInputFormatter>? inputFormatters;
+  final VoidCallback? onTap;
+  final bool readOnly;
+  final IconData? prefixIcon;
+  final int maxLines;
+  final bool enabled;
 
   const AppTextField({
     super.key,
@@ -17,6 +22,11 @@ class AppTextField extends StatefulWidget {
     this.keyboardType,
     this.validator,
     this.inputFormatters,
+    this.onTap,
+    this.readOnly = false,
+    this.prefixIcon,
+    this.maxLines = 1,
+    this.enabled = true,
   });
 
   @override
@@ -40,17 +50,24 @@ class _AppTextFieldState extends State<AppTextField> {
       keyboardType: widget.keyboardType,
       validator: widget.validator,
       inputFormatters: widget.inputFormatters,
+      readOnly: widget.readOnly,
+      onTap: widget.onTap,
+      maxLines: widget.maxLines,
+      enabled: widget.enabled,
+      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF0F172A)),
       decoration: InputDecoration(
-        hintText: widget.label,
-        hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+        labelText: widget.label,
+        labelStyle: const TextStyle(color: Color(0xFF64748B), fontSize: 13, fontWeight: FontWeight.w500),
+        floatingLabelStyle: const TextStyle(color: Color(0xFF2563EB), fontWeight: FontWeight.bold),
+        prefixIcon: widget.prefixIcon != null ? Icon(widget.prefixIcon, color: const Color(0xFF64748B), size: 20) : null,
         filled: true,
-        fillColor: Colors.white,
+        fillColor: widget.enabled ? const Color(0xFFF8FAFC) : const Color(0xFFE2E8F0).withOpacity(0.5),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         suffixIcon: widget.obscure
             ? IconButton(
                 icon: Icon(
                   _obscureText ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                  color: Colors.grey.shade600,
+                  color: const Color(0xFF64748B),
                   size: 20,
                 ),
                 onPressed: () {
@@ -61,19 +78,19 @@ class _AppTextFieldState extends State<AppTextField> {
               )
             : null,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.grey.shade300, width: 1.5),
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: Colors.grey.shade200, width: 1.5),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.grey.shade300, width: 1.5),
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: Colors.grey.shade200, width: 1.5),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFF4D64F5), width: 1.5),
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.5),
         ),
         errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(14),
           borderSide: const BorderSide(color: Colors.red, width: 1.5),
         ),
       ),

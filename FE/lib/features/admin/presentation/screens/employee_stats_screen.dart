@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:front_end/core/network/api_client.dart';
 import 'package:front_end/core/utils/error_mapper.dart';
+import '../../../common/widgets/app_dialog.dart';
 
 class EmployeeStatsScreen extends StatefulWidget {
   final String userId;
@@ -25,6 +26,8 @@ class _EmployeeStatsScreenState extends State<EmployeeStatsScreen> {
   List<dynamic> _records = [];
   Map<String, int> _stats = {'PRESENT': 0, 'LATE': 0, 'ABSENT': 0, 'LEAVE': 0, 'SICK': 0};
   String _filter = 'month';
+  DateTime? _startDate;
+  DateTime? _endDate;
 
   @override
   void initState() {
@@ -35,8 +38,14 @@ class _EmployeeStatsScreenState extends State<EmployeeStatsScreen> {
   Future<void> _loadStats() async {
     setState(() => _loading = true);
     try {
-      // Re-use the existing endpoint with user_id filter
-      final res = await ApiClient.get('/api/admin/attendance?filter=$_filter&user_id=${widget.userId}');
+      String url = '/api/admin/attendance?filter=$_filter&user_id=${widget.userId}';
+      if (_filter == 'custom' && _startDate != null && _endDate != null) {
+        final s = _startDate!.toString().substring(0, 10);
+        final e = _endDate!.toString().substring(0, 10);
+        url = '/api/admin/attendance?start_date=$s&end_date=$e&user_id=${widget.userId}';
+      }
+      
+      final res = await ApiClient.get(url);
       if (res.success && mounted) {
         final List<dynamic> data = res.data ?? [];
         _records = data;
@@ -54,7 +63,7 @@ class _EmployeeStatsScreenState extends State<EmployeeStatsScreen> {
       }
     } catch (e) {
       final msg = ErrorMapper.map(e);
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      if (mounted) AppDialog.showError(context, msg);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -160,16 +169,94 @@ class _EmployeeStatsScreenState extends State<EmployeeStatsScreen> {
   }
 
   Widget _buildFilterRow() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
+    return Column(
       children: [
-        _filterBtn('week', 'Minggu'),
-        const SizedBox(width: 8),
-        _filterBtn('month', 'Bulan'),
-        const SizedBox(width: 8),
-        _filterBtn('year', 'Tahun'),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            _filterBtn('week', 'Minggu'),
+            const SizedBox(width: 8),
+            _filterBtn('month', 'Bulan'),
+            const SizedBox(width: 8),
+            _filterBtn('year', 'Tahun'),
+            const SizedBox(width: 8),
+            _filterBtn('custom', 'Kustom'),
+          ],
+        ),
+        if (_filter == 'custom') ...[
+          const SizedBox(height: 16),
+          _buildDateRangePicker(),
+        ],
       ],
     );
+  }
+
+  Widget _buildDateRangePicker() {
+    return Row(
+      children: [
+        Expanded(child: _buildDateInput('Mulai', true)),
+        const SizedBox(width: 12),
+        Expanded(child: _buildDateInput('Selesai', false)),
+      ],
+    );
+  }
+
+  Widget _buildDateInput(String label, bool isStart) {
+    final date = isStart ? _startDate : _endDate;
+    final dateStr = date != null ? date.toString().substring(0, 10) : 'Pilih';
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF64748B))),
+        const SizedBox(height: 6),
+        InkWell(
+          onTap: () => _pickSingleDate(isStart),
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey.shade200),
+              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10)],
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.calendar_today_rounded, size: 14, color: Color(0xFF2563EB)),
+                const SizedBox(width: 8),
+                Expanded(child: Text(dateStr, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)))),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _pickSingleDate(bool isStart) async {
+    final initial = (isStart ? _startDate : _endDate) ?? DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(2023),
+      lastDate: DateTime.now(),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(primary: Color(0xFF2563EB), onPrimary: Colors.white, onSurface: Color(0xFF0F172A)),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null) {
+      setState(() {
+        if (isStart) _startDate = picked;
+        else _endDate = picked;
+      });
+      if (_startDate != null && _endDate != null) _loadStats();
+    }
   }
 
   Widget _filterBtn(String f, String label) {

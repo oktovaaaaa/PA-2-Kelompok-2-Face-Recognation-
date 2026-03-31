@@ -1,11 +1,15 @@
 // lib/features/employee/presentation/screens/tabs/employee_profile_tab.dart
 
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../../../../core/network/api_client.dart';
 import '../../../../../core/storage/session_storage.dart';
+import '../../../../../core/constants/app_constants.dart';
 import '../../../../auth/presentation/screens/landing_screen.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/services.dart';
+import '../../../../common/widgets/app_text_field.dart';
+import '../../../../common/widgets/app_dialog.dart';
 
 class EmployeeProfileTab extends StatefulWidget {
   const EmployeeProfileTab({super.key});
@@ -17,6 +21,7 @@ class EmployeeProfileTab extends StatefulWidget {
 class _EmployeeProfileTabState extends State<EmployeeProfileTab> {
   Map<String, dynamic>? _profile;
   bool _loading = true;
+  File? _imageFile;
 
   @override
   void initState() {
@@ -25,21 +30,12 @@ class _EmployeeProfileTabState extends State<EmployeeProfileTab> {
   }
 
   Future<void> _logout() async {
-    final act = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Keluar', style: TextStyle(fontWeight: FontWeight.bold)),
-        content: const Text('Apakah Anda yakin ingin keluar?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Batal')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Keluar'),
-          ),
-        ],
-      ),
+    final act = await AppDialog.showConfirm(
+      context,
+      title: 'Keluar Aplikasi',
+      message: 'Apakah Anda yakin ingin keluar dari sesi ini?',
+      confirmText: 'Ya, Keluar',
+      confirmColor: Colors.red.shade600,
     );
     if (act != true) return;
     await SessionStorage.clear();
@@ -59,6 +55,50 @@ class _EmployeeProfileTabState extends State<EmployeeProfileTab> {
     }
   }
 
+  Future<void> _pickImage() async {
+    final pickedFile = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 50);
+    if (pickedFile != null) {
+      final file = File(pickedFile.path);
+      setState(() => _loading = true);
+      try {
+        final uploadRes = await ApiClient.uploadFile(file);
+        if (uploadRes.status) {
+          final photoUrl = uploadRes.data['url'];
+          await ApiClient.put('/api/profile', {
+            'name': _profile?['name'] ?? '',
+            'phone': _profile?['phone'] ?? '',
+            'birth_place': _profile?['birth_place'] ?? '',
+            'birth_date': _profile?['birth_date'] ?? '',
+            'address': _profile?['address'] ?? '',
+            'photo_url': photoUrl,
+          });
+          setState(() {
+            _imageFile = file;
+            if (_profile != null) {
+              _profile!['photo_url'] = photoUrl;
+            }
+          });
+          if (mounted) {
+            AppDialog.showSuccess(context, 'Foto profil berhasil diperbarui.');
+          }
+        }
+      } catch (e) {
+        if (mounted) AppDialog.showError(context, 'Gagal memperbarui foto: $e');
+      } finally {
+        if (mounted) setState(() => _loading = false);
+      }
+    }
+  }
+
+  String _getInitials(String name) {
+    if (name.trim().isEmpty) return '?';
+    final pts = name.trim().split(RegExp(r'\s+'));
+    if (pts.length >= 2) {
+      return (pts[0][0] + pts[1][0]).toUpperCase();
+    }
+    return pts[0][0].toUpperCase();
+  }
+
   void _editProfile() {
     final nameCtrl = TextEditingController(text: _profile?['name'] ?? '');
     final phoneCtrl = TextEditingController(text: _profile?['phone'] ?? '');
@@ -69,33 +109,100 @@ class _EmployeeProfileTabState extends State<EmployeeProfileTab> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.only(left: 20, right: 20, top: 20, bottom: MediaQuery.of(ctx).viewInsets.bottom + 20),
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+        padding: EdgeInsets.only(left: 24, right: 24, top: 24, bottom: MediaQuery.of(ctx).viewInsets.bottom + 24),
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Edit Data Diri', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-              const SizedBox(height: 4),
-              Text('Data diri tidak bisa dihapus, hanya bisa diedit.',
-                  style: TextStyle(color: Colors.orange.shade700, fontSize: 12)),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Edit Data Diri', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: Color(0xFF0F172A))),
+                  IconButton(onPressed: () => Navigator.pop(ctx), icon: const Icon(Icons.close_rounded)),
+                ],
+              ),
+              const SizedBox(height: 24),
+              Center(
+                child: GestureDetector(
+                  onTap: () async {
+                    Navigator.pop(ctx);
+                    _pickImage();
+                  },
+                  child: Stack(
+                    children: [
+                      Container(
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(color: const Color(0xFF2563EB).withOpacity(0.1), width: 4),
+                        ),
+                        child: CircleAvatar(
+                          radius: 40,
+                          backgroundColor: const Color(0xFFF1F5F9),
+                          backgroundImage: (_profile?['photo_url'] != null && _profile!['photo_url'].toString().isNotEmpty)
+                              ? NetworkImage('${AppConstants.baseUrl}${_profile!['photo_url']}')
+                              : null,
+                          child: (_profile?['photo_url'] == null || _profile!['photo_url'].toString().isEmpty)
+                              ? const Icon(Icons.person_rounded, size: 40, color: Color(0xFF94A3B8))
+                              : null,
+                        ),
+                      ),
+                      const Positioned(
+                        bottom: 0,
+                        right: 0,
+                        child: CircleAvatar(
+                          radius: 12,
+                          backgroundColor: Color(0xFF2563EB),
+                          child: Icon(Icons.camera_alt_rounded, size: 14, color: Colors.white),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+              AppTextField(controller: nameCtrl, label: 'Nama Lengkap', prefixIcon: Icons.person_outline_rounded),
               const SizedBox(height: 16),
-              _field(nameCtrl, 'Nama Lengkap', Icons.person_rounded),
-              _field(phoneCtrl, 'Nomor Telepon', Icons.phone_rounded, keyboardType: TextInputType.phone),
-              _field(birthPlaceCtrl, 'Tempat Lahir', Icons.location_city_rounded),
-              _field(birthDateCtrl, 'Tanggal Lahir (YYYY-MM-DD)', Icons.calendar_today_rounded),
-              _field(addressCtrl, 'Alamat', Icons.home_rounded, maxLines: 2),
+              AppTextField(controller: phoneCtrl, label: 'Nomor Telepon', prefixIcon: Icons.phone_android_rounded, keyboardType: TextInputType.phone),
               const SizedBox(height: 16),
+              AppTextField(controller: birthPlaceCtrl, label: 'Tempat Lahir', prefixIcon: Icons.location_city_outlined),
+              const SizedBox(height: 16),
+              AppTextField(
+                controller: birthDateCtrl, 
+                label: 'Tanggal Lahir', 
+                prefixIcon: Icons.calendar_today_outlined,
+                readOnly: true,
+                onTap: () async {
+                  final initial = DateTime.tryParse(birthDateCtrl.text) ?? DateTime(2000, 1, 1);
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: initial,
+                    firstDate: DateTime(1950),
+                    lastDate: DateTime.now(),
+                    builder: (context, child) {
+                      return Theme(data: Theme.of(context).copyWith(colorScheme: const ColorScheme.light(primary: Color(0xFF2563EB))), child: child!);
+                    },
+                  );
+                  if (picked != null) {
+                    birthDateCtrl.text = picked.toString().substring(0, 10);
+                  }
+                },
+              ),
+              const SizedBox(height: 16),
+              AppTextField(controller: addressCtrl, label: 'Alamat', prefixIcon: Icons.home_outlined, maxLines: 2),
+              const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF2E7D32),
+                    backgroundColor: const Color(0xFF2563EB),
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    elevation: 0,
                   ),
                   onPressed: () async {
                     Navigator.pop(ctx);
@@ -105,15 +212,17 @@ class _EmployeeProfileTabState extends State<EmployeeProfileTab> {
                       'birth_place': birthPlaceCtrl.text.trim(),
                       'birth_date': birthDateCtrl.text.trim(),
                       'address': addressCtrl.text.trim(),
+                      'photo_url': _profile?['photo_url'],
                     });
                     if (!mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                      content: Text(res.success ? 'Profil berhasil diperbarui' : (res.message ?? 'Gagal')),
-                      backgroundColor: res.success ? Colors.green : Colors.red,
-                    ));
+                    if (res.success) {
+                      AppDialog.showSuccess(context, 'Profil Berhasil Diperbarui');
+                    } else {
+                      AppDialog.showError(context, res.message ?? 'Gagal memperbarui profil');
+                    }
                     if (res.success) _load();
                   },
-                  child: const Text('Simpan'),
+                  child: const Text('Simpan Perubahan', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                 ),
               ),
             ],
@@ -123,20 +232,31 @@ class _EmployeeProfileTabState extends State<EmployeeProfileTab> {
     );
   }
 
-  Widget _field(TextEditingController ctrl, String label, IconData icon,
-      {TextInputType? keyboardType, int maxLines = 1}) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: TextField(
-        controller: ctrl,
-        keyboardType: keyboardType,
-        maxLines: maxLines,
-        decoration: InputDecoration(
-          labelText: label,
-          prefixIcon: Icon(icon),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+  Widget _buildField(TextEditingController ctrl, String label, IconData icon,
+      {TextInputType? keyboardType, int maxLines = 1, bool readOnly = false, VoidCallback? onTap}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF64748B))),
+        const SizedBox(height: 8),
+        TextField(
+          controller: ctrl,
+          keyboardType: keyboardType,
+          maxLines: maxLines,
+          readOnly: readOnly,
+          onTap: onTap,
+          decoration: InputDecoration(
+            prefixIcon: Icon(icon, color: const Color(0xFF64748B), size: 20),
+            filled: true,
+            fillColor: const Color(0xFFF8FAFC),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade200)),
+            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade200)),
+            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.5)),
+            contentPadding: const EdgeInsets.symmetric(vertical: 16),
+          ),
         ),
-      ),
+        const SizedBox(height: 16),
+      ],
     );
   }
 
@@ -151,186 +271,174 @@ class _EmployeeProfileTabState extends State<EmployeeProfileTab> {
     final positionName = _v('position_name');
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.light.copyWith(
-        statusBarColor: Colors.transparent,
-      ),
+      value: SystemUiOverlayStyle.light.copyWith(statusBarColor: Colors.transparent),
       child: Scaffold(
         backgroundColor: const Color(0xFFF8FAFC),
         body: Column(
           children: [
-            // Premium Header with Avatar
+            // Header Premium with Avatar
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.only(top: 64, left: 24, right: 24, bottom: 28),
+              padding: const EdgeInsets.only(top: 64, left: 24, right: 24, bottom: 40),
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
                   colors: [Color(0xFF0F172A), Color(0xFF1E3A8A), Color(0xFF2563EB)],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
-                borderRadius: BorderRadius.only(
-                  bottomLeft: Radius.circular(32),
-                  bottomRight: Radius.circular(32),
-                ),
+                borderRadius: BorderRadius.only(bottomLeft: Radius.circular(40), bottomRight: Radius.circular(40)),
               ),
               child: Column(
                 children: [
-                  Container(
-                    width: 72,
-                    height: 72,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white.withOpacity(0.4), width: 3),
-                    ),
-                    child: Center(
-                      child: Text(
-                        _v('name').substring(0, 1).toUpperCase(),
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 28),
-                      ),
+                  GestureDetector(
+                    onTap: _pickImage,
+                    child: Stack(
+                      children: [
+                        Container(
+                          width: 80,
+                          height: 80,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.15),
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white.withOpacity(0.3), width: 2),
+                            image: (_profile?['photo_url'] != null && _profile!['photo_url'].toString().isNotEmpty)
+                                ? DecorationImage(
+                                    image: NetworkImage('${AppConstants.baseUrl}${_profile!['photo_url']}'),
+                                    fit: BoxFit.cover,
+                                  )
+                                : null,
+                          ),
+                          child: (_profile?['photo_url'] == null || _profile!['photo_url'].toString().isEmpty)
+                              ? Center(
+                                  child: Text(
+                                    _getInitials(_v('name')),
+                                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 28),
+                                  ),
+                                )
+                              : null,
+                        ),
+                        Positioned(
+                          bottom: 0,
+                          right: 0,
+                          child: Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                            child: const Icon(Icons.camera_alt_rounded, size: 14, color: Color(0xFF2563EB)),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  Text(_v('name'), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
+                  const SizedBox(height: 16),
+                  Text(_v('name'), style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white)),
                   const SizedBox(height: 4),
-                  Text(_v('email'), style: TextStyle(color: Colors.white.withOpacity(0.75), fontSize: 13)),
-                  const SizedBox(height: 10),
+                  Text(_v('email'), style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 13)),
+                  const SizedBox(height: 12),
                   if (positionName != '-')
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
+                        color: Colors.white.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: Colors.white.withOpacity(0.3)),
+                        border: Border.all(color: Colors.white.withOpacity(0.2)),
                       ),
-                      child: Text('💼 $positionName', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.work_outline_rounded, color: Colors.white, size: 16),
+                          const SizedBox(width: 8),
+                          Text(positionName, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                        ],
+                      ),
                     ),
                 ],
               ),
             ),
   
             Expanded(
-              child: RefreshIndicator(
-                color: const Color(0xFF2563EB),
-                onRefresh: _load,
-                child: ListView(
-                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
-                  children: [
-                    if (hasSalary) ...[
-                      Container(
-                        padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFF1E3A8A), Color(0xFF2563EB)],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
-                          borderRadius: BorderRadius.circular(20),
-                          boxShadow: [BoxShadow(color: const Color(0xFF2563EB).withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 8))],
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.account_balance_wallet_rounded, color: Colors.white, size: 32),
-                            const SizedBox(width: 16),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text('Gaji Pokok', style: TextStyle(color: Colors.white70, fontSize: 13)),
-                                Text(
-                                  'Rp ${salary.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.')}',
-                                  style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                    ],
+              child: ListView(
+                padding: const EdgeInsets.all(24),
+                children: [
+                  if (hasSalary) ...[
                     Container(
+                      padding: const EdgeInsets.all(24),
                       decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 12, offset: const Offset(0, 4))],
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF1E3A8A), Color(0xFF2563EB)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(24),
+                        boxShadow: [BoxShadow(color: const Color(0xFF2563EB).withOpacity(0.3), blurRadius: 20, offset: const Offset(0, 10))],
                       ),
-                      padding: const EdgeInsets.all(20),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      child: Row(
                         children: [
-                          Row(
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(16)),
+                            child: const Icon(Icons.account_balance_wallet_outlined, color: Colors.white, size: 28),
+                          ),
+                          const SizedBox(width: 20),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(color: const Color(0xFF2563EB).withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
-                                child: const Icon(Icons.person_rounded, color: Color(0xFF2563EB), size: 20),
-                              ),
-                              const SizedBox(width: 12),
-                              const Expanded(child: Text('Data Diri', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF0F172A)))),
-                              GestureDetector(
-                                onTap: _editProfile,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                  decoration: BoxDecoration(color: const Color(0xFF2563EB).withOpacity(0.08), borderRadius: BorderRadius.circular(20)),
-                                  child: const Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(Icons.edit_rounded, color: Color(0xFF2563EB), size: 14),
-                                      SizedBox(width: 4),
-                                      Text('Edit', style: TextStyle(color: Color(0xFF2563EB), fontSize: 13, fontWeight: FontWeight.bold)),
-                                    ],
-                                  ),
-                                ),
+                              Text('Gaji Pokok Bulanan', style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 13)),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Rp ${salary.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.')}',
+                                style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
                               ),
                             ],
                           ),
-                          const SizedBox(height: 16),
-                          Divider(color: Colors.grey.shade100, height: 1),
-                          const SizedBox(height: 12),
-                          _row('Telepon', _v('phone')),
-                          _row('Tempat Lahir', _v('birth_place')),
-                          _row('Tgl Lahir', _v('birth_date')),
-                          _row('Alamat', _v('address')),
-                          _row('Status', _v('status')),
                         ],
                       ),
                     ),
-                    const SizedBox(height: 16),
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 12, offset: const Offset(0, 4))],
-                      ),
-                      child: Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          onTap: _logout,
-                          borderRadius: BorderRadius.circular(20),
-                          child: Padding(
-                            padding: const EdgeInsets.all(20),
-                            child: Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(8),
-                                  decoration: BoxDecoration(color: Colors.red.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
-                                  child: const Icon(Icons.logout_rounded, color: Colors.red, size: 20),
-                                ),
-                                const SizedBox(width: 16),
-                                const Expanded(
-                                  child: Text(
-                                    'Keluar / Log Out',
-                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.red),
-                                  ),
-                                ),
-                                const Icon(Icons.chevron_right_rounded, color: Colors.red),
-                              ],
-                            ),
+                    const SizedBox(height: 20),
+                  ],
+                  _buildDataCard(
+                    title: 'Data Diri',
+                    icon: Icons.person_outline_rounded,
+                    color: const Color(0xFF2563EB),
+                    onEdit: _editProfile,
+                    rows: [
+                      _infoRow('Telepon', _v('phone')),
+                      _infoRow('Tempat Lahir', _v('birth_place')),
+                      _infoRow('Tgl Lahir', _v('birth_date')),
+                      _infoRow('Alamat', _v('address')),
+                      _infoRow('Status Akun', _v('status')),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(24),
+                      boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 20, offset: const Offset(0, 10))],
+                    ),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: _logout,
+                        borderRadius: BorderRadius.circular(24),
+                        child: Padding(
+                          padding: const EdgeInsets.all(20),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(color: Colors.red.withOpacity(0.1), borderRadius: BorderRadius.circular(14)),
+                                child: const Icon(Icons.logout_rounded, color: Colors.red, size: 24),
+                              ),
+                              const SizedBox(width: 16),
+                              const Expanded(child: Text('Keluar dari Aplikasi', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.red))),
+                              const Icon(Icons.chevron_right_rounded, color: Colors.red),
+                            ],
                           ),
                         ),
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -339,15 +447,40 @@ class _EmployeeProfileTabState extends State<EmployeeProfileTab> {
     );
   }
 
-  Widget _row(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 5),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildDataCard({required String title, required IconData icon, required Color color, required VoidCallback onEdit, required List<Widget> rows}) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 20, offset: const Offset(0, 10))],
+      ),
+      child: Column(
         children: [
-          SizedBox(width: 90, child: Text(label, style: TextStyle(color: Colors.grey.shade500, fontSize: 13))),
-          const Text(': ', style: TextStyle(color: Colors.grey)),
-          Expanded(child: Text(value, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Color(0xFF0F172A)))),
+          Padding(
+            padding: const EdgeInsets.all(20),
+            child: Row(
+              children: [
+                Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(14)), child: Icon(icon, color: color, size: 24)),
+                const SizedBox(width: 16),
+                Expanded(child: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF0F172A)))),
+                IconButton(onPressed: onEdit, icon: Icon(Icons.edit_note_rounded, color: color, size: 28)),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          Padding(padding: const EdgeInsets.all(20), child: Column(children: rows)),
+        ],
+      ),
+    );
+  }
+
+  Widget _infoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          SizedBox(width: 100, child: Text(label, style: TextStyle(color: Colors.grey.shade500, fontSize: 14))),
+          Expanded(child: Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF334155)))),
         ],
       ),
     );

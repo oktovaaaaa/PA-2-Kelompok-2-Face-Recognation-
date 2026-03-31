@@ -92,6 +92,7 @@ func SetupRouter() *gin.Engine {
 
 		// Riwayat absensi semua karyawan
 		admin.GET("/attendance", handlers.AdminGetAttendanceHistory)
+		admin.GET("/dashboard/summary", handlers.AdminGetDashboardSummary)
 
 		// Pengaturan absensi
 		admin.GET("/attendance-settings", handlers.GetAttendanceSettings)

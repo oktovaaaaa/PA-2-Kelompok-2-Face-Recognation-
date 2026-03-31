@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../../../core/network/api_client.dart';
 import 'package:flutter/services.dart';
+import '../../../../common/widgets/app_dialog.dart';
 
 class EmployeeLeaveTab extends StatefulWidget {
   const EmployeeLeaveTab({super.key});
@@ -179,13 +180,13 @@ class _EmployeeLeaveTabState extends State<EmployeeLeaveTab> {
                             ? await ApiClient.put('/api/employee/leaves/${existing!['id']}', body)
                             : await ApiClient.post('/api/employee/leaves', body);
                         if (!mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                          content: Text(res.success
-                              ? (isEdit ? 'Izin diperbarui' : 'Izin berhasil diajukan!')
-                              : (res.message ?? 'Gagal')),
-                          backgroundColor: res.success ? Colors.green : Colors.red,
-                        ));
-                        if (res.success) _load();
+                        if (!mounted) return;
+                        if (res.success) {
+                          AppDialog.showSuccess(context, isEdit ? 'Izin diperbarui' : 'Izin berhasil diajukan!');
+                          _load();
+                        } else {
+                          AppDialog.showError(context, res.message ?? 'Gagal memproses izin');
+                        }
                       } catch (_) {}
                     },
                     child: Text(isEdit ? 'Simpan Perubahan' : 'Ajukan Izin'),
@@ -200,31 +201,24 @@ class _EmployeeLeaveTabState extends State<EmployeeLeaveTab> {
   }
 
   Future<void> _deleteLeave(String id) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Hapus Riwayat Izin', style: TextStyle(fontWeight: FontWeight.bold)),
-        content: const Text('Hapus dari riwayat kamu? Admin masih dapat melihat data ini.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Batal')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Hapus'),
-          ),
-        ],
-      ),
+    final confirmed = await AppDialog.showConfirm(
+      context,
+      title: 'Hapus Riwayat Izin',
+      message: 'Apakah Anda yakin ingin menghapus izin ini dari riwayat?',
+      confirmText: 'Ya, Hapus',
+      confirmColor: Colors.red,
     );
     if (confirmed != true) return;
     try {
       final res = await ApiClient.delete('/api/employee/leaves/$id');
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(res.success ? 'Dihapus dari riwayat kamu' : (res.message ?? 'Gagal')),
-        backgroundColor: res.success ? Colors.green : Colors.red,
-      ));
-      if (res.success) _load();
+      if (!mounted) return;
+      if (res.success) {
+        AppDialog.showSuccess(context, 'Dihapus dari riwayat kamu');
+        _load();
+      } else {
+        AppDialog.showError(context, res.message ?? 'Gagal menghapus riwayat');
+      }
     } catch (_) {}
   }
 

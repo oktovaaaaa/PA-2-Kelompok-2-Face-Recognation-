@@ -56,11 +56,12 @@ func GetEmployees(c *gin.Context) {
 			Role:       u.Role,
 			Status:     u.Status,
 			DeviceID:   u.DeviceID,
-			PositionID: u.PositionID,
+			PositionID: "",
 		}
-		if u.PositionID != "" {
+		if u.PositionID != nil {
+			ep.PositionID = *u.PositionID
 			var pos models.Position
-			if err := database.DB.Where("id = ?", u.PositionID).First(&pos).Error; err == nil {
+			if err := database.DB.Where("id = ?", *u.PositionID).First(&pos).Error; err == nil {
 				ep.PositionName = pos.Name
 				ep.Salary = pos.Salary
 			}

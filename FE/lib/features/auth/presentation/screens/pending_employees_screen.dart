@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/utils/error_mapper.dart';
 import '../../../auth/data/auth_repository.dart';
 import '../../../auth/models/app_user.dart';
+import '../../../common/widgets/app_dialog.dart';
 
 class PendingEmployeesScreen extends StatefulWidget {
   const PendingEmployeesScreen({super.key});
@@ -29,7 +30,7 @@ class _PendingEmployeesScreenState extends State<PendingEmployeesScreen> {
     } catch (e) {
       final msg = ErrorMapper.map(e);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      AppDialog.showError(context, msg);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -42,7 +43,7 @@ class _PendingEmployeesScreenState extends State<PendingEmployeesScreen> {
     } catch (e) {
       final msg = ErrorMapper.map(e);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      AppDialog.showError(context, msg);
     }
   }
 
@@ -53,7 +54,7 @@ class _PendingEmployeesScreenState extends State<PendingEmployeesScreen> {
     } catch (e) {
       final msg = ErrorMapper.map(e);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      AppDialog.showError(context, msg);
     }
   }
 

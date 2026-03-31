@@ -130,7 +130,11 @@ func AssignPosition(c *gin.Context) {
 		}
 	}
 
-	employee.PositionID = body.PositionID
+	if body.PositionID == "" {
+		employee.PositionID = nil
+	} else {
+		employee.PositionID = &body.PositionID
+	}
 	database.DB.Save(&employee)
 	utils.Success(c, "Jabatan karyawan berhasil diperbarui", nil)
 }

@@ -17,13 +17,18 @@ class EmployeeDashboardScreen extends StatefulWidget {
 
 class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
   int _currentIndex = 0;
+  late final List<Widget> _tabs;
 
-  final List<Widget> _tabs = const [
-    EmployeeAttendanceTab(),
-    EmployeeHistoryTab(),
-    EmployeeLeaveTab(),
-    EmployeeProfileTab(),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _tabs = [
+      EmployeeAttendanceTab(onNavigate: (i) => setState(() => _currentIndex = i)),
+      const EmployeeHistoryTab(),
+      const EmployeeLeaveTab(),
+      const EmployeeProfileTab(),
+    ];
+  }
 
   Future<void> _logout() async {
     final act = await showDialog<bool>(

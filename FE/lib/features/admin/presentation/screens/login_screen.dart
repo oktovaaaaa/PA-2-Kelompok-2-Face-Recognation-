@@ -14,6 +14,8 @@ import '../../../auth/data/auth_repository.dart';
 import 'otp_login_screen.dart';
 import 'splash_gate.dart';
 import '../../../auth/presentation/screens/forgot_password_screen.dart';
+import '../../../auth/presentation/screens/landing_screen.dart';
+import '../../../common/widgets/app_dialog.dart';
 import 'reset_password_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -100,7 +102,7 @@ class _LoginScreenState extends State<LoginScreen> {
     } catch (e) {
       final msg = ErrorMapper.map(e);
       if (!mounted) return;
-      _showErrorPopup(msg);
+      AppDialog.showError(context, msg);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -120,9 +122,7 @@ class _LoginScreenState extends State<LoginScreen> {
       await _repo.googleLogin(idToken);
       
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Login Google diproses, periksa email Anda untuk OTP.')),
-      );
+      AppDialog.showInfo(context, 'Login Google diproses, periksa email Anda untuk OTP.');
 
       Navigator.push(
         context,
@@ -133,7 +133,7 @@ class _LoginScreenState extends State<LoginScreen> {
     } catch (e) {
       final msg = ErrorMapper.map(e);
       if (!mounted) return;
-      _showErrorPopup(msg);
+      AppDialog.showError(context, msg);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -141,9 +141,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _loginPin() async {
     if (_pin.text.trim().length != 6) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('PIN harus 6 digit.')),
-      );
+      AppDialog.showError(context, 'PIN harus 6 digit.');
       return;
     }
 
@@ -165,7 +163,7 @@ class _LoginScreenState extends State<LoginScreen> {
     } catch (e) {
       final msg = ErrorMapper.map(e);
       if (!mounted) return;
-      _showErrorPopup(msg);
+      AppDialog.showError(context, msg);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -173,47 +171,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
   String? _required(String? v) => (v == null || v.trim().isEmpty) ? 'Wajib diisi' : null;
 
-  void _showErrorPopup(String message) {
-    if (!mounted) return;
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        contentPadding: const EdgeInsets.all(24),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.1),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.error_outline_rounded, color: Colors.red, size: 56),
-            ),
-            const SizedBox(height: 16),
-            const Text('Terjadi Kesalahan', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
-            const SizedBox(height: 8),
-            Text(message, textAlign: TextAlign.center, style: TextStyle(color: Colors.grey.shade700)),
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.red,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                ),
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Coba Lagi', style: TextStyle(fontWeight: FontWeight.bold)),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -228,23 +185,32 @@ class _LoginScreenState extends State<LoginScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (Navigator.canPop(context)) ...[
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: GestureDetector(
-                    onTap: () => Navigator.pop(context),
-                    child: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: GestureDetector(
+                  onTap: () {
+                    if (Navigator.canPop(context)) {
+                      Navigator.pop(context);
+                    } else {
+                      // Jika root (misal setelah registrasi), panggil LandingScreen
+                      Navigator.pushAndRemoveUntil(
+                        context,
+                        MaterialPageRoute(builder: (_) => const LandingScreen()),
+                        (_) => false,
+                      );
+                    }
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(12),
                     ),
+                    child: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
                   ),
                 ),
-                const SizedBox(height: 32),
-              ],
+              ),
+              const SizedBox(height: 32),
               Text(
                 pinOnly ? 'Login PIN' : 'Selamat Datang!',
                 textAlign: TextAlign.center,

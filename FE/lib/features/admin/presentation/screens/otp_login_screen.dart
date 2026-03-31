@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:pinput/pinput.dart';
 import '../../../../core/storage/session_storage.dart';
 import '../../../../core/utils/error_mapper.dart';
 import 'splash_gate.dart';
 import '../../../common/widgets/wavy_background.dart';
+import '../../../common/widgets/app_dialog.dart';
 import '../../../auth/data/auth_repository.dart';
 
 class OtpLoginScreen extends StatefulWidget {
@@ -38,16 +40,12 @@ class _OtpLoginScreenState extends State<OtpLoginScreen> {
     try {
       await _repo.sendOtp(widget.email);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('OTP baru telah dikirim ke email Anda')),
-        );
+        AppDialog.showSuccess(context, 'OTP baru telah dikirim ke email Anda');
         _startTimer();
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Gagal mengirim ulang OTP: ${ErrorMapper.map(e)}')),
-        );
+        AppDialog.showError(context, 'Gagal mengirim ulang OTP: ${ErrorMapper.map(e)}');
       }
     } finally {
       if (mounted) setState(() => _resending = false);
@@ -74,53 +72,12 @@ class _OtpLoginScreenState extends State<OtpLoginScreen> {
     } catch (e) {
       final msg = ErrorMapper.map(e);
       if (!mounted) return;
-      _showErrorPopup(msg);
+      AppDialog.showError(context, msg);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
-  void _showErrorPopup(String message) {
-    if (!mounted) return;
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        contentPadding: const EdgeInsets.all(24),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.1),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.error_outline_rounded, color: Colors.red, size: 56),
-            ),
-            const SizedBox(height: 16),
-            const Text('Terjadi Kesalahan', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
-            const SizedBox(height: 8),
-            Text(message, textAlign: TextAlign.center, style: TextStyle(color: Colors.grey.shade700)),
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.red,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                ),
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Coba Lagi', style: TextStyle(fontWeight: FontWeight.bold)),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -172,6 +129,7 @@ class _OtpLoginScreenState extends State<OtpLoginScreen> {
                       controller: _otp,
                       length: 6,
                       keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                       defaultPinTheme: PinTheme(
                         width: 48,
                         height: 56,

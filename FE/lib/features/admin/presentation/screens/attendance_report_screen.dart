@@ -6,6 +6,7 @@ import '../../../../core/utils/currency_formatter.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
+import '../../../common/widgets/app_dialog.dart';
 
 class AttendanceReportScreen extends StatefulWidget {
   const AttendanceReportScreen({super.key});
@@ -112,7 +113,7 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
 
   Future<void> _exportExcel() async {
     if (_filteredRecords.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tidak ada data untuk diekspor')));
+      AppDialog.showInfo(context, 'Tidak ada data untuk diekspor');
       return;
     }
     try {
@@ -122,15 +123,17 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
         if (path.contains('Download')) {
           msg = 'Tersimpan di folder Download';
         }
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(msg),
-          backgroundColor: Colors.green,
-          action: SnackBarAction(label: 'Buka', textColor: Colors.white, onPressed: () => OpenFilex.open(path)),
-        ));
+        AppDialog.showSuccess(
+          context, 
+          msg,
+          confirmText: 'Buka File',
+        ).then((confirmed) {
+           if (confirmed == true) OpenFilex.open(path);
+        });
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal ekspor: $e'), backgroundColor: Colors.red));
+        AppDialog.showError(context, 'Gagal ekspor: $e');
       }
     }
   }
@@ -174,11 +177,6 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
                         ),
                       ),
                       IconButton(
-                        onPressed: _selectDateRange,
-                        icon: const Icon(Icons.calendar_month_rounded, color: Colors.white),
-                        tooltip: 'Pilih Rentang Tanggal',
-                      ),
-                      IconButton(
                         onPressed: _exportExcel,
                         icon: const Icon(Icons.download_rounded, color: Colors.white),
                         tooltip: 'Export Excel',
@@ -192,11 +190,30 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
             // Analytics Section
             if (!_loading && _allRecords.isNotEmpty) _buildAnalyticsSection(),
 
-            // Filters
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
+            // Filters & Date Range Selection
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 15, offset: const Offset(0, 5))],
+              ),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(color: const Color(0xFF2563EB).withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
+                        child: const Icon(Icons.tune_rounded, color: Color(0xFF2563EB), size: 20),
+                      ),
+                      const SizedBox(width: 12),
+                      const Text('Filter Laporan', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF0F172A))),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
                   TextField(
                     onChanged: (v) {
                       _searchQuery = v;
@@ -206,12 +223,13 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
                       hintText: 'Cari nama karyawan...',
                       prefixIcon: const Icon(Icons.search_rounded),
                       filled: true,
-                      fillColor: Colors.white,
+                      fillColor: const Color(0xFFF8FAFC),
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
                       contentPadding: const EdgeInsets.symmetric(vertical: 0),
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 16),
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: Row(
@@ -219,10 +237,26 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
                         _periodChip('week', 'Minggu Ini'),
                         _periodChip('month', 'Bulan Ini'),
                         _periodChip('year', 'Tahun Ini'),
-                        if (_selectedDateRange != null) _periodChip('custom', 'Kustom'),
-                        const SizedBox(width: 16),
-                        Container(width: 1, height: 20, color: Colors.grey.shade300),
-                        const SizedBox(width: 16),
+                        _periodChip('custom', 'Pilih Tanggal'),
+                      ],
+                    ),
+                  ),
+                  
+                  if (_periodFilter == 'custom') ...[
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(child: _buildDateInput('Mulai', true)),
+                        const SizedBox(width: 12),
+                        Expanded(child: _buildDateInput('Selesai', false)),
+                      ],
+                    ),
+                  ],
+                  const SizedBox(height: 16),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
                         _filterChip('ALL', 'Semua'),
                         _filterChip('PRESENT', 'Hadir'),
                         _filterChip('LATE', 'Terlambat'),
@@ -312,29 +346,61 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
     );
   }
 
-  Future<void> _selectDateRange() async {
-    final range = await showDateRangePicker(
+  Widget _buildDateInput(String label, bool isStart) {
+    final date = isStart ? _selectedDateRange?.start : _selectedDateRange?.end;
+    final dateStr = date != null ? DateFormat('dd/MM/yyyy').format(date) : '-';
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF64748B))),
+        const SizedBox(height: 6),
+        InkWell(
+          onTap: () => _pickSingleDate(isStart),
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey.shade200),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.calendar_today_rounded, size: 14, color: Color(0xFF2563EB)),
+                const SizedBox(width: 8),
+                Expanded(child: Text(dateStr, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)))),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _pickSingleDate(bool isStart) async {
+    final initial = (isStart ? _selectedDateRange?.start : _selectedDateRange?.end) ?? DateTime.now();
+    final picked = await showDatePicker(
       context: context,
+      initialDate: initial,
       firstDate: DateTime(2023),
       lastDate: DateTime.now(),
-      initialDateRange: _selectedDateRange,
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.light(
-              primary: Color(0xFF2563EB),
-              onPrimary: Colors.white,
-              onSurface: Color(0xFF0F172A),
-            ),
+            colorScheme: const ColorScheme.light(primary: Color(0xFF2563EB), onPrimary: Colors.white, onSurface: Color(0xFF0F172A)),
           ),
           child: child!,
         );
       },
     );
-    if (range != null) {
+    if (picked != null) {
       setState(() {
-        _selectedDateRange = range;
-        _periodFilter = 'custom';
+        if (isStart) {
+          _selectedDateRange = DateTimeRange(start: picked, end: _selectedDateRange?.end ?? picked.add(const Duration(days: 1)));
+        } else {
+          _selectedDateRange = DateTimeRange(start: _selectedDateRange?.start ?? picked.subtract(const Duration(days: 1)), end: picked);
+        }
       });
       _loadData();
     }

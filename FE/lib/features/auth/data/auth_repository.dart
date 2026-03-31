@@ -20,7 +20,9 @@ class AuthRepository {
     required String companyAddress,
     required String companyEmail,
     required String companyPhone,
+    String? photoUrl,
     String? googleIdToken,
+    String? otpCode,
   }) async {
     final res = await ApiClient.post('/auth/register-admin', {
       'name': name,
@@ -35,6 +37,8 @@ class AuthRepository {
       'companyAddress': companyAddress,
       'companyEmail': companyEmail,
       'companyPhone': companyPhone,
+      'photoURL': photoUrl,
+      'otpCode': otpCode,
       if (googleIdToken != null) 'googleIDToken': googleIdToken,
     });
 
@@ -215,7 +219,9 @@ class AuthRepository {
     required String birthDate,
     required String address,
     required String inviteToken,
+    String? photoUrl,
     String? googleIdToken,
+    String? otpCode,
   }) async {
     final res = await ApiClient.post('/auth/register-employee', {
       'name': name,
@@ -227,6 +233,8 @@ class AuthRepository {
       'birthDate': birthDate,
       'address': address,
       'inviteToken': inviteToken,
+      'photoURL': photoUrl,
+      'otpCode': otpCode,
       if (googleIdToken != null) 'googleIDToken': googleIdToken,
     });
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../../../core/network/api_client.dart';
+import '../../../../common/widgets/app_dialog.dart';
 
 class AdminLeaveTab extends StatefulWidget {
   const AdminLeaveTab({super.key});
@@ -54,54 +55,26 @@ class _AdminLeaveTabState extends State<AdminLeaveTab> with SingleTickerProvider
 
   Future<void> _processLeave(String id, String action) async {
     final noteCtrl = TextEditingController();
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(action == 'approve' ? 'Setujui Izin' : 'Tolak Izin',
-            style: const TextStyle(fontWeight: FontWeight.bold)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(action == 'approve'
-                ? 'Apakah Anda yakin ingin menyetujui izin ini?'
-                : 'Apakah Anda yakin ingin menolak izin ini?'),
-            const SizedBox(height: 12),
-            TextField(
-              controller: noteCtrl,
-              decoration: InputDecoration(
-                labelText: 'Catatan (opsional)',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-              maxLines: 2,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Batal')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: action == 'approve' ? Colors.green : Colors.red,
-              foregroundColor: Colors.white,
-            ),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(action == 'approve' ? 'Setujui' : 'Tolak'),
-          ),
-        ],
-      ),
+    final confirmed = await AppDialog.showConfirm(
+      context,
+      title: action == 'approve' ? 'Setujui Izin' : 'Tolak Izin',
+      message: action == 'approve'
+          ? 'Apakah Anda yakin ingin menyetujui izin ini?'
+          : 'Apakah Anda yakin ingin menolak izin ini?',
+      confirmText: action == 'approve' ? 'Setujui' : 'Tolak',
+      confirmColor: action == 'approve' ? Colors.green : Colors.red,
     );
 
     if (confirmed != true) return;
     try {
       final res = await ApiClient.put('/api/admin/leaves/$id/$action', {'note': noteCtrl.text});
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(res.success ? (action == 'approve' ? 'Izin disetujui' : 'Izin ditolak') : (res.message ?? 'Gagal')),
-          backgroundColor: res.success ? Colors.green : Colors.red,
-        ),
-      );
-      if (res.success) _loadLeaves();
+      if (res.success) {
+        AppDialog.showSuccess(context, action == 'approve' ? 'Izin disetujui' : 'Izin ditolak');
+        _loadLeaves();
+      } else {
+        AppDialog.showError(context, res.message ?? 'Gagal memproses izin');
+      }
     } catch (_) {}
   }
 

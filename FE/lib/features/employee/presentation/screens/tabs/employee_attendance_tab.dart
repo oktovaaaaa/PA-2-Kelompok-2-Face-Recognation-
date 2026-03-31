@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import '../../../../../core/network/api_client.dart';
 import '../../../../../core/storage/session_storage.dart';
 import '../../../../../core/utils/currency_formatter.dart';
+import '../../../../../core/constants/app_constants.dart';
 import 'package:flutter/services.dart';
+import '../../../../common/widgets/app_dialog.dart';
 
 class EmployeeAttendanceTab extends StatefulWidget {
-  const EmployeeAttendanceTab({super.key});
+  final Function(int)? onNavigate;
+  const EmployeeAttendanceTab({super.key, this.onNavigate});
 
   @override
   State<EmployeeAttendanceTab> createState() => _EmployeeAttendanceTabState();
@@ -36,8 +39,11 @@ class _EmployeeAttendanceTabState extends State<EmployeeAttendanceTab> {
           _todayData = resAtt.data as Map<String, dynamic>?;
           if (resProf.success) {
              _profileData = resProf.data as Map<String, dynamic>?;
+             // Gunakan nama dari profil jika ada
+             _userName = _profileData?['name'] ?? name;
+          } else {
+             _userName = name;
           }
-          _userName = name;
         });
       }
     } finally {
@@ -50,14 +56,12 @@ class _EmployeeAttendanceTabState extends State<EmployeeAttendanceTab> {
     try {
       final res = await ApiClient.post('/api/employee/attendance/$action', {});
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(res.success
-            ? (action == 'checkin' ? '✅ Check-in berhasil!' : '✅ Check-out berhasil!')
-            : (res.message ?? 'Gagal')),
-        backgroundColor: res.success ? Colors.green : Colors.red,
-        behavior: SnackBarBehavior.floating,
-      ));
-      if (res.success) _load();
+      if (res.success) {
+        AppDialog.showSuccess(context, action == 'checkin' ? 'Check-in berhasil!' : 'Check-out berhasil!');
+        _load();
+      } else {
+        AppDialog.showError(context, res.message ?? 'Gagal melakukan absensi');
+      }
     } finally {
       if (mounted) setState(() => _actionLoading = false);
     }
@@ -66,6 +70,21 @@ class _EmployeeAttendanceTabState extends State<EmployeeAttendanceTab> {
   String _formatRp(dynamic amount) {
     if (amount == null) return 'Rp 0';
     return 'Rp ${CurrencyInputFormatter.formatNumber((amount as num).toInt())}';
+  }
+
+  String _getShortName(String name) {
+    final words = name.trim().split(RegExp(r'\s+'));
+    if (words.length <= 2) return name;
+    return '${words[0]} ${words[1]}';
+  }
+
+  String _getInitials(String name) {
+    if (name.trim().isEmpty) return '?';
+    final pts = name.trim().split(RegExp(r'\s+'));
+    if (pts.length >= 2) {
+      return (pts[0][0] + pts[1][0]).toUpperCase();
+    }
+    return pts[0][0].toUpperCase();
   }
 
   @override
@@ -110,27 +129,31 @@ class _EmployeeAttendanceTabState extends State<EmployeeAttendanceTab> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Hi, ${_userName ?? 'Karyawan'} 👋',
-                        style: const TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Hi, ${_getShortName(_userName ?? 'Karyawan')} 👋',
+                          style: const TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                          softWrap: true,
                         ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _todayData?['date'] ?? '-',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.white.withOpacity(0.75),
+                        const SizedBox(height: 4),
+                        Text(
+                          _todayData?['date'] ?? '-',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.white.withOpacity(0.75),
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
+                  const SizedBox(width: 12),
                   Container(
                     padding: const EdgeInsets.all(2),
                     decoration: BoxDecoration(
@@ -140,10 +163,15 @@ class _EmployeeAttendanceTabState extends State<EmployeeAttendanceTab> {
                     child: CircleAvatar(
                       radius: 22,
                       backgroundColor: Colors.white.withOpacity(0.2),
-                      child: Text(
-                        (_userName ?? 'K').substring(0, 1).toUpperCase(),
-                        style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 18),
-                      ),
+                      backgroundImage: (_profileData?['photo_url'] != null && _profileData!['photo_url'].toString().isNotEmpty)
+                          ? NetworkImage('${AppConstants.baseUrl}${_profileData!['photo_url']}')
+                          : null,
+                      child: (_profileData?['photo_url'] == null || _profileData!['photo_url'].toString().isEmpty)
+                          ? Text(
+                              _getInitials(_userName ?? 'Karyawan'),
+                              style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 16),
+                            )
+                          : null,
                     ),
                   ),
                 ],
@@ -267,7 +295,9 @@ class _EmployeeAttendanceTabState extends State<EmployeeAttendanceTab> {
                           color: const Color(0xFFD97706),
                           disabled: false,
                           onTap: () {
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Gunakan tab Izin di bawah.')));
+                            if (widget.onNavigate != null) {
+                              widget.onNavigate!(2); // Tab Izin adalah index 2
+                            }
                           },
                         ),
                         _buildQuickAction(
@@ -276,7 +306,9 @@ class _EmployeeAttendanceTabState extends State<EmployeeAttendanceTab> {
                           color: const Color(0xFF64748B),
                           disabled: false,
                           onTap: () {
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Gunakan tab Riwayat di bawah.')));
+                            if (widget.onNavigate != null) {
+                              widget.onNavigate!(1); // Tab Riwayat adalah index 1
+                            }
                           },
                         ),
                       ],

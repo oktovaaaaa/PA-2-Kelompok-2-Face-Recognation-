@@ -11,12 +11,16 @@ import 'package:fl_chart/fl_chart.dart';
 import '../../../../../core/network/api_client.dart';
 import '../../../../../core/storage/session_storage.dart';
 import '../../../../../core/utils/error_mapper.dart';
+import '../../../../../core/constants/app_constants.dart';
 import '../../../../auth/data/auth_repository.dart';
 import '../../../../auth/presentation/screens/pending_employees_screen.dart';
+import '../../../../auth/presentation/screens/pending_employees_screen.dart';
 import '../attendance_report_screen.dart';
+import '../../../../common/widgets/app_dialog.dart';
 
 class AdminHomeTab extends StatefulWidget {
-  const AdminHomeTab({super.key});
+  final Function(int)? onNavigate;
+  const AdminHomeTab({super.key, this.onNavigate});
 
   @override
   State<AdminHomeTab> createState() => _AdminHomeTabState();
@@ -30,6 +34,7 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
   String? _userName;
   Map<String, dynamic> _summary = {'present': 0, 'absent': 0, 'late': 0, 'leave': 0, 'total': 0};
   bool _loadingSummary = false;
+  String? _photoUrl;
 
   @override
   void initState() {
@@ -54,8 +59,24 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
   }
 
   Future<void> _loadUserName() async {
-    final name = await SessionStorage.getUserName();
-    if (mounted) setState(() => _userName = name);
+    try {
+      final resProf = await ApiClient.get('/api/profile');
+      final name = await SessionStorage.getUserName();
+      if (mounted) {
+        setState(() {
+          if (resProf.success) {
+            final profile = resProf.data as Map<String, dynamic>?;
+            _userName = profile?['name'] ?? name;
+            _photoUrl = profile?['photo_url'];
+          } else {
+            _userName = name;
+          }
+        });
+      }
+    } catch (_) {
+      final name = await SessionStorage.getUserName();
+      if (mounted) setState(() => _userName = name);
+    }
   }
 
   Future<void> _generateInvite() async {
@@ -68,7 +89,7 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
     } catch (e) {
       final msg = ErrorMapper.map(e);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      AppDialog.showError(context, msg);
     } finally {
       if (mounted) setState(() => _loadingInvite = false);
     }
@@ -77,9 +98,7 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
   Future<void> _copyToken() async {
     await Clipboard.setData(ClipboardData(text: _generatedToken));
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Token disalin ke clipboard!')),
-    );
+    AppDialog.showSuccess(context, 'Token disalin ke clipboard!');
   }
 
   Future<void> _saveQrCode() async {
@@ -95,14 +114,14 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
         name: "invite_qr_${DateTime.now().millisecondsSinceEpoch}",
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(result['isSuccess'] == true ? 'QR disimpan ke galeri!' : 'Gagal menyimpan QR.')),
-      );
+      if (result['isSuccess'] == true) {
+        AppDialog.showSuccess(context, 'QR disimpan ke galeri!');
+      } else {
+        AppDialog.showError(context, 'Gagal menyimpan QR.');
+      }
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Terjadi kesalahan saat menyimpan gambar.')),
-      );
+      AppDialog.showError(context, 'Terjadi kesalahan saat menyimpan gambar.');
     }
   }
 
@@ -134,27 +153,31 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Hi, ${_userName ?? 'Admin'} 👋',
-                      style: const TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Hi, ${_getShortName(_userName ?? 'Admin')} 👋',
+                        style: const TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                        softWrap: true,
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Kelola perusahaan dengan mudah',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.white.withOpacity(0.75),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Kelola perusahaan dengan mudah',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.white.withOpacity(0.75),
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
+                const SizedBox(width: 12),
                 Container(
                   padding: const EdgeInsets.all(2),
                   decoration: BoxDecoration(
@@ -164,10 +187,15 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
                   child: CircleAvatar(
                     radius: 22,
                     backgroundColor: Colors.white.withOpacity(0.2),
-                    child: Text(
-                      (_userName ?? 'A').substring(0, 1).toUpperCase(),
-                      style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 18),
-                    ),
+                    backgroundImage: (_photoUrl != null && _photoUrl!.isNotEmpty)
+                        ? NetworkImage('${AppConstants.baseUrl}$_photoUrl')
+                        : null,
+                    child: (_photoUrl == null || _photoUrl!.isEmpty)
+                        ? Text(
+                            _getInitials(_userName ?? 'Admin'),
+                            style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 16),
+                          )
+                        : null,
                   ),
                 ),
               ],
@@ -285,6 +313,38 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
                         ),
                     ],
                   ),
+                ),
+                const SizedBox(height: 28),
+
+                // Quick Actions (Memberikan kemudahan navigasi tab)
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    _buildQuickAction(
+                      icon: Icons.assignment_turned_in_rounded,
+                      label: 'Perizinan',
+                      color: const Color(0xFFD97706),
+                      onTap: () => widget.onNavigate?.call(1),
+                    ),
+                    _buildQuickAction(
+                      icon: Icons.people_rounded,
+                      label: 'Karyawan',
+                      color: const Color(0xFF2563EB),
+                      onTap: () => widget.onNavigate?.call(3),
+                    ),
+                    _buildQuickAction(
+                      icon: Icons.work_rounded,
+                      label: 'Jabatan',
+                      color: const Color(0xFF0F172A),
+                      onTap: () => widget.onNavigate?.call(2),
+                    ),
+                    _buildQuickAction(
+                      icon: Icons.person_rounded,
+                      label: 'Profil',
+                      color: const Color(0xFF64748B),
+                      onTap: () => widget.onNavigate?.call(4),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 32),
 
@@ -422,6 +482,56 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
         ],
       ),
     ),
+    );
+  }
+
+  String _getShortName(String name) {
+    if (name.trim().isEmpty) return '';
+    final words = name.trim().split(RegExp(r'\s+'));
+    if (words.length <= 2) return name;
+    return '${words[0]} ${words[1]}';
+  }
+
+  String _getInitials(String name) {
+    if (name.trim().isEmpty) return '?';
+    final pts = name.trim().split(RegExp(r'\s+'));
+    if (pts.length >= 2) {
+      return (pts[0][0] + pts[1][0]).toUpperCase();
+    }
+    return pts[0][0].toUpperCase();
+  }
+
+  Widget _buildQuickAction({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: color, size: 28),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF0F172A),
+              height: 1.2,
+            ),
+          ),
+        ],
+      ),
     );
   }
 

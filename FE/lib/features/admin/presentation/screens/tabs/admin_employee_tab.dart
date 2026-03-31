@@ -2,8 +2,10 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../../../../../core/network/api_client.dart';
 import '../employee_stats_screen.dart';
+import '../../../../../core/network/api_client.dart';
+import '../../../../common/widgets/app_dialog.dart';
+import '../../../../../core/utils/error_mapper.dart';
 
 class AdminEmployeeTab extends StatefulWidget {
   const AdminEmployeeTab({super.key});
@@ -54,34 +56,12 @@ class _AdminEmployeeTabState extends State<AdminEmployeeTab> with SingleTickerPr
 
   Future<void> _fireEmployee(Map<String, dynamic> emp) async {
     final reasonCtrl = TextEditingController();
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Pecat Karyawan', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('Pecat ${emp['name']}? Status karyawan akan menjadi RESIGNED dan tidak bisa login lagi.'),
-            const SizedBox(height: 12),
-            TextField(
-              controller: reasonCtrl,
-              decoration: InputDecoration(
-                labelText: 'Alasan (opsional)',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Batal')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Pecat'),
-          ),
-        ],
-      ),
+    final confirmed = await AppDialog.showConfirm(
+      context,
+      title: 'Pecat Karyawan',
+      message: 'Apakah Anda yakin ingin memecat ${emp['name']}? Status karyawan akan menjadi RESIGNED dan tidak bisa login lagi.',
+      confirmText: 'Ya, Pecat',
+      confirmColor: Colors.red,
     );
     if (confirmed != true) return;
 
@@ -89,71 +69,55 @@ class _AdminEmployeeTabState extends State<AdminEmployeeTab> with SingleTickerPr
       final res = await ApiClient.post('/api/admin/employees/fire',
           {'user_id': emp['id'], 'reason': reasonCtrl.text});
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(res.success ? '${emp['name']} berhasil diberhentikan' : (res.message ?? 'Gagal')),
-        backgroundColor: res.success ? Colors.green : Colors.red,
-      ));
-      if (res.success) _loadData();
+      if (res.success) {
+        AppDialog.showSuccess(context, '${emp['name']} berhasil diberhentikan');
+        _loadData();
+      } else {
+        AppDialog.showError(context, res.message ?? 'Gagal memecat karyawan');
+      }
     } catch (_) {}
   }
 
   Future<void> _reactivateEmployee(Map<String, dynamic> emp) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Aktifkan Kembali', style: TextStyle(fontWeight: FontWeight.bold)),
-        content: Text('Aktifkan kembali ${emp['name']}? Karyawan akan bisa login kembali.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Batal')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Aktifkan'),
-          ),
-        ],
-      ),
+    final confirmed = await AppDialog.showConfirm(
+      context,
+      title: 'Aktifkan Kembali',
+      message: 'Aktifkan kembali ${emp['name']}? Karyawan akan bisa login kembali.',
+      confirmText: 'Ya, Aktifkan',
+      confirmColor: Colors.green,
     );
     if (confirmed != true) return;
 
     try {
       final res = await ApiClient.post('/api/admin/employees/reactivate', {'user_id': emp['id']});
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(res.success ? 'Karyawan berhasil diaktifkan' : (res.message ?? 'Gagal')),
-        backgroundColor: res.success ? Colors.green : Colors.red,
-      ));
-      if (res.success) _loadData();
+      if (res.success) {
+        AppDialog.showSuccess(context, 'Karyawan berhasil diaktifkan');
+        _loadData();
+      } else {
+        AppDialog.showError(context, res.message ?? 'Gagal mengaktifkan karyawan');
+      }
     } catch (_) {}
   }
 
   Future<void> _resetDevice(Map<String, dynamic> emp) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Reset Device ID', style: TextStyle(fontWeight: FontWeight.bold)),
-        content: Text(
-            'Reset device ID ${emp['name']}? Karyawan bisa login di HP baru setelah ini.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Batal')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.white),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Reset'),
-          ),
-        ],
-      ),
+    final confirmed = await AppDialog.showConfirm(
+      context,
+      title: 'Reset Device ID',
+      message: 'Reset device ID ${emp['name']}? Karyawan bisa login di HP baru setelah ini.',
+      confirmText: 'Ya, Reset',
+      confirmColor: Colors.orange,
     );
     if (confirmed != true) return;
 
     try {
       final res = await ApiClient.post('/api/admin/reset-device', {'user_id': emp['id']});
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(res.success ? 'Device ID berhasil direset' : (res.message ?? 'Gagal')),
-        backgroundColor: res.success ? Colors.green : Colors.red,
-      ));
+      if (res.success) {
+        AppDialog.showSuccess(context, 'Device ID berhasil direset');
+      } else {
+        AppDialog.showError(context, res.message ?? 'Gagal meriset device id');
+      }
     } catch (_) {}
   }
 
@@ -203,11 +167,12 @@ class _AdminEmployeeTabState extends State<AdminEmployeeTab> with SingleTickerPr
                       final res = await ApiClient.post('/api/admin/positions/assign',
                           {'user_id': emp['id'], 'position_id': selectedPositionId ?? ''});
                       if (!mounted) return;
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                        content: Text(res.success ? 'Jabatan berhasil diset' : (res.message ?? 'Gagal')),
-                        backgroundColor: res.success ? Colors.green : Colors.red,
-                      ));
-                      if (res.success) _loadData();
+                      if (res.success) {
+                        AppDialog.showSuccess(context, 'Jabatan berhasil diset');
+                        _loadData();
+                      } else {
+                        AppDialog.showError(context, res.message ?? 'Gagal menset jabatan');
+                      }
                     } catch (_) {}
                   },
                   child: const Text('Simpan Jabatan'),

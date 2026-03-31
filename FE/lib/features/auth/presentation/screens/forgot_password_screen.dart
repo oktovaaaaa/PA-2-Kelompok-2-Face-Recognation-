@@ -4,6 +4,7 @@ import 'package:front_end/features/common/widgets/app_text_field.dart';
 import 'package:front_end/features/common/widgets/wavy_background.dart';
 import 'package:front_end/core/utils/error_mapper.dart';
 import 'package:front_end/features/auth/data/auth_repository.dart';
+import '../../../common/widgets/app_dialog.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
@@ -34,9 +35,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(ErrorMapper.map(e))),
-      );
+      AppDialog.showError(context, ErrorMapper.map(e));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
