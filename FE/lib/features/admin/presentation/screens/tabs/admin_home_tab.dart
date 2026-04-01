@@ -291,6 +291,9 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
                                     if (_summary['late'] > 0) PieChartSectionData(value: (_summary['late'] as num).toDouble(), color: Colors.orange, radius: 20, showTitle: false),
                                     if (_summary['absent'] > 0) PieChartSectionData(value: (_summary['absent'] as num).toDouble(), color: Colors.red, radius: 20, showTitle: false),
                                     if (_summary['leave'] > 0) PieChartSectionData(value: (_summary['leave'] as num).toDouble(), color: Colors.blue, radius: 20, showTitle: false),
+                                    // Fallback jika semua nol (Belum mulai)
+                                    if ((_summary['present'] ?? 0) == 0 && (_summary['late'] ?? 0) == 0 && (_summary['absent'] ?? 0) == 0 && (_summary['leave'] ?? 0) == 0)
+                                      PieChartSectionData(value: 1, color: Colors.grey.shade200, radius: 20, showTitle: false),
                                   ],
                                 ),
                               ),

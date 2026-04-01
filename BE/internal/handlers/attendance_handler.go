@@ -29,10 +29,22 @@ func CheckIn(c *gin.Context) {
 		return
 	}
 
-	// Validasi waktu check-in
-	if !isTimeInRange(now, settings.CheckInStart, settings.CheckInEnd) {
-		utils.Error(c, fmt.Sprintf("Check-in hanya diperbolehkan antara %s - %s", settings.CheckInStart, settings.CheckInEnd))
+	// Validasi waktu check-in: Mulai setelah CheckInStart dan sebelum CheckOutStart dimulai
+	if now.Before(parseT(today, settings.CheckInStart, now.Location())) {
+		utils.Error(c, fmt.Sprintf("Absensi masuk belum dibuka. Mulai jam %s", settings.CheckInStart))
 		return
+	}
+	if now.Equal(parseT(today, settings.CheckOutStart, now.Location())) || now.After(parseT(today, settings.CheckOutStart, now.Location())) {
+		utils.Error(c, "Batas waktu check-in sudah habis (sudah masuk jam pulang)")
+		return
+	}
+
+	// Tentukan Status: LATE jika lewat dari CheckInEnd
+	status := "PRESENT"
+	var deduction float64 = 0
+	if now.After(parseT(today, settings.CheckInEnd, now.Location())) {
+		status = "LATE"
+		deduction = settings.LatePenalty
 	}
 
 	// Cek apakah sudah check-in hari ini
@@ -44,7 +56,7 @@ func CheckIn(c *gin.Context) {
 		}
 	}
 
-	upsertCheckIn(emp.ID, emp.CompanyID, today, now)
+	upsertCheckIn(emp.ID, emp.CompanyID, today, now, status, deduction)
 	utils.Success(c, "Check-in berhasil", gin.H{
 		"check_in_time": now.Format("15:04:05"),
 		"date":          today,
@@ -109,12 +121,32 @@ func GetTodayAttendance(c *gin.Context) {
 	var settings models.AttendanceSettings
 	database.DB.Where("company_id = ?", emp.CompanyID).First(&settings)
 
+	// Hitung status tampilan dinamis
+	displayStatus := att.Status
+	now := time.Now()
+	loc := now.Location()
+	
+	if err != nil { // Belum ada record absensi hari ini
+		if now.Before(parseT(today, settings.CheckInStart, loc)) {
+			displayStatus = "NOT_STARTED" // Label: Belum Mulai
+		} else if now.After(parseT(today, settings.CheckInEnd, loc)) {
+			displayStatus = "ABSENT" // Label: Alpha
+		} else {
+			displayStatus = "READY" // Sesuai jam tapi belum klik
+		}
+	} else if att.CheckOutTime == nil { // Sudah check-in tapi belum check-out
+		if now.After(parseT(today, settings.CheckOutEnd, loc)) {
+			displayStatus = "EARLY_LEAVE" // Label: Pulang di jam kerja
+		}
+	}
+
 	utils.Success(c, "Status absensi hari ini", gin.H{
-		"date":            today,
-		"attendance":      att,
-		"has_record":      err == nil,
-		"settings":        settings,
-		"current_time":    time.Now().Format("15:04:05"),
+		"date":           today,
+		"attendance":     att,
+		"has_record":     err == nil,
+		"settings":       settings,
+		"current_time":   now.Format("15:04:05"),
+		"display_status": displayStatus,
 	})
 }
 
@@ -224,6 +256,7 @@ func GetAttendanceSettings(c *gin.Context) {
 			CheckOutStart: "16:00",
 			CheckOutEnd:   "18:00",
 			AlphaPenalty:  0,
+			LatePenalty:   0,
 		})
 		return
 	}
@@ -241,6 +274,7 @@ func UpdateAttendanceSettings(c *gin.Context) {
 		CheckOutStart string  `json:"check_out_start"`
 		CheckOutEnd   string  `json:"check_out_end"`
 		AlphaPenalty  float64 `json:"alpha_penalty"`
+		LatePenalty   float64 `json:"late_penalty"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		utils.Error(c, "Data tidak valid")
@@ -259,6 +293,7 @@ func UpdateAttendanceSettings(c *gin.Context) {
 	settings.CheckOutStart = body.CheckOutStart
 	settings.CheckOutEnd = body.CheckOutEnd
 	settings.AlphaPenalty = body.AlphaPenalty
+	settings.LatePenalty = body.LatePenalty
 
 	database.DB.Save(&settings)
 	utils.Success(c, "Pengaturan absensi berhasil diperbarui", settings)
@@ -283,7 +318,17 @@ func AdminGetDashboardSummary(c *gin.Context) {
 	database.DB.Model(&models.User{}).Where("company_id = ? AND status = ? AND role = ?", admin.CompanyID, "ACTIVE", "EMPLOYEE").Count(&totalEmployees)
 
 	// Hitung Alpha (Sisa karyawan yang belum absen sama sekali)
-	absentCount := totalEmployees - (present + late + leave + sick)
+	// Jika sebelum jam masuk, Alpha diset 0 agar dashboard tidak merah sebelum waktunya
+	var absentCount int64
+	var settings models.AttendanceSettings
+	database.DB.Where("company_id = ?", admin.CompanyID).First(&settings)
+
+	if time.Now().Before(parseT(today, settings.CheckInStart, time.Now().Location())) {
+		absentCount = 0
+	} else {
+		absentCount = totalEmployees - (present + late + leave + sick)
+	}
+
 	if absentCount < 0 {
 		absentCount = 0
 	}
@@ -305,13 +350,8 @@ func isTimeInRange(now time.Time, start, end string) bool {
 	loc := now.Location()
 	todayStr := now.Format("2006-01-02")
 
-	parseT := func(t string) time.Time {
-		parsed, _ := time.ParseInLocation("2006-01-02 15:04", todayStr+" "+t, loc)
-		return parsed
-	}
-
-	s := parseT(start)
-	e := parseT(end)
+	s := parseT(todayStr, start, loc)
+	e := parseT(todayStr, end, loc)
 	return (now.Equal(s) || now.After(s)) && (now.Equal(e) || now.Before(e))
 }
 
@@ -334,22 +374,30 @@ func getFilterStart(filter string) string {
 }
 
 // upsertCheckIn membuat atau update record check-in
-func upsertCheckIn(userID, companyID, date string, checkInTime time.Time) {
+func upsertCheckIn(userID, companyID, date string, checkInTime time.Time, status string, deduction float64) {
 	var att models.Attendance
 	err := database.DB.Where("user_id = ? AND date = ?", userID, date).First(&att).Error
 	if err != nil {
 		att = models.Attendance{
-			ID:          uuid.New().String(),
-			UserID:      userID,
-			CompanyID:   companyID,
-			Date:        date,
-			CheckInTime: &checkInTime,
-			Status:      "PRESENT",
+			ID:              uuid.New().String(),
+			UserID:          userID,
+			CompanyID:       companyID,
+			Date:            date,
+			CheckInTime:     &checkInTime,
+			Status:          status,
+			SalaryDeduction: deduction,
 		}
 		database.DB.Create(&att)
 	} else {
 		att.CheckInTime = &checkInTime
-		att.Status = "PRESENT"
+		att.Status = status
+		att.SalaryDeduction = deduction
 		database.DB.Save(&att)
 	}
+}
+
+// helper parseT (pindah keluar untuk dipakai di CheckIn)
+func parseT(dateStr, t string, loc *time.Location) time.Time {
+	parsed, _ := time.ParseInLocation("2006-01-02 15:04", dateStr+" "+t, loc)
+	return parsed
 }

@@ -154,7 +154,7 @@ class _EmployeeLeaveTabState extends State<EmployeeLeaveTab> {
                   width: double.infinity,
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF2E7D32),
+                      backgroundColor: const Color(0xFF2563EB),
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -232,7 +232,7 @@ class _EmployeeLeaveTabState extends State<EmployeeLeaveTab> {
         backgroundColor: const Color(0xFFF8FAFC),
         floatingActionButton: FloatingActionButton.extended(
           onPressed: () => _showForm(),
-          backgroundColor: const Color(0xFF0F172A),
+          backgroundColor: const Color(0xFF2563EB),
           foregroundColor: Colors.white,
           elevation: 4,
           highlightElevation: 8,

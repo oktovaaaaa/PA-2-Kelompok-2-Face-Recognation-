@@ -35,6 +35,7 @@ class WavyBackground extends StatelessWidget {
             ),
           ),
           
+          // Bola latar belakang (Statis)
           // Bola bercahaya besar (kiri bawah)
           Positioned(
             left: -50,

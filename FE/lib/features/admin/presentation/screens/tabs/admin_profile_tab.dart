@@ -306,6 +306,10 @@ class _AdminProfileTabState extends State<AdminProfileTab> {
         text: _settings?['alpha_penalty'] != null
             ? CurrencyInputFormatter.formatNumber((_settings!['alpha_penalty'] as num).toInt())
             : '0');
+    final latePenaltyCtrl = TextEditingController(
+        text: _settings?['late_penalty'] != null
+            ? CurrencyInputFormatter.formatNumber((_settings!['late_penalty'] as num).toInt())
+            : '0');
 
     showModalBottomSheet(
       context: context,
@@ -342,6 +346,9 @@ class _AdminProfileTabState extends State<AdminProfileTab> {
               _buildField(penaltyCtrl, 'Denda Alpha (Rp)', Icons.payments_outlined,
                   keyboardType: TextInputType.number,
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly, CurrencyInputFormatter()]),
+              _buildField(latePenaltyCtrl, 'Denda Terlambat (Rp)', Icons.warning_amber_rounded,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly, CurrencyInputFormatter()]),
               const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
@@ -360,6 +367,7 @@ class _AdminProfileTabState extends State<AdminProfileTab> {
                       'check_out_start': checkOutStartCtrl.text.trim(),
                       'check_out_end': checkOutEndCtrl.text.trim(),
                       'alpha_penalty': CurrencyInputFormatter.unformat(penaltyCtrl.text.trim()).toDouble(),
+                      'late_penalty': CurrencyInputFormatter.unformat(latePenaltyCtrl.text.trim()).toDouble(),
                     });
                     if (!mounted) return;
                     if (res.success) {
@@ -552,6 +560,7 @@ class _AdminProfileTabState extends State<AdminProfileTab> {
                       _infoRow('Check-In', '${_val(_settings, ['check_in_start'])} - ${_val(_settings, ['check_in_end'])}'),
                       _infoRow('Check-Out', '${_val(_settings, ['check_out_start'])} - ${_val(_settings, ['check_out_end'])}'),
                       _infoRow('Sanksi Alpha', 'Rp ${CurrencyInputFormatter.formatNumber((_settings?['alpha_penalty'] as num?)?.toInt() ?? 0)}'),
+                      _infoRow('Sanksi Terlambat', 'Rp ${CurrencyInputFormatter.formatNumber((_settings?['late_penalty'] as num?)?.toInt() ?? 0)}'),
                     ],
                   ),
                   const SizedBox(height: 20),

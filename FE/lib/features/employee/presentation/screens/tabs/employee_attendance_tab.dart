@@ -97,11 +97,21 @@ class _EmployeeAttendanceTabState extends State<EmployeeAttendanceTab> {
     final settings = _todayData?['settings'] as Map<String, dynamic>?;
     final hasCheckedIn = att != null && att['check_in_time'] != null && att['check_in_time'].toString().isNotEmpty;
     final hasCheckedOut = att != null && att['check_out_time'] != null && att['check_out_time'].toString().isNotEmpty;
-    final now = _todayData?['current_time'] ?? '--:--:--';
+    final nowTimeStr = _todayData?['current_time'] ?? '--:--:--';
+    final displayStatus = _todayData?['display_status'] ?? '';
     
     final salary = _profileData?['salary'] ?? 0;
     final position = (_profileData?['position_name'] ?? 'Karyawan').toString();
     final isDoneForDay = hasCheckedIn && hasCheckedOut;
+
+    // Helper untuk cek jam operasional (Frontend sync)
+    bool isCheckInOpen() => displayStatus != 'NOT_STARTED' && displayStatus != 'EARLY_LEAVE';
+    bool isCheckOutOpen() {
+      if (settings == null) return false;
+      // Gunakan string comparison sederhana atau biarkan backend yang handle pesan errornya
+      // Di sini kita buat tombol aktif hanya jika sudah check-in dan belum check-out
+      return hasCheckedIn && !hasCheckedOut;
+    }
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light.copyWith(
@@ -258,8 +268,16 @@ class _EmployeeAttendanceTabState extends State<EmployeeAttendanceTab> {
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    isDoneForDay ? 'SELESAI ✔️' : 'PROSES...',
-                                    style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 2),
+                                    () {
+                                      if (isDoneForDay) return 'SELESAI ✔️';
+                                      if (displayStatus == 'LATE') return 'TERLAMBAT ⚠️';
+                                      if (displayStatus == 'ABSENT') return 'ALPHA ❌';
+                                      if (displayStatus == 'NOT_STARTED') return 'BELUM MULAI';
+                                      if (displayStatus == 'EARLY_LEAVE') return 'PULANG JAM KERJA';
+                                      if (hasCheckedIn && !hasCheckedOut) return 'HADIR (AKTIF)';
+                                      return 'SIAP...';
+                                    }().toUpperCase(),
+                                    style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 1),
                                   ),
                                 ],
                               ),
@@ -279,14 +297,14 @@ class _EmployeeAttendanceTabState extends State<EmployeeAttendanceTab> {
                           icon: Icons.login_rounded,
                           label: 'Check In',
                           color: const Color(0xFF2E7D32),
-                          disabled: hasCheckedIn,
+                          disabled: hasCheckedIn || !isCheckInOpen(),
                           onTap: () => _doAction('checkin'),
                         ),
                         _buildQuickAction(
                           icon: Icons.logout_rounded,
                           label: 'Check Out',
                           color: const Color(0xFF1E3A8A),
-                          disabled: !hasCheckedIn || hasCheckedOut,
+                          disabled: !hasCheckedIn || hasCheckedOut, // Biarkan backend validasi jendela waktunya agar pesan error muncul
                           onTap: () => _doAction('checkout'),
                         ),
                         _buildQuickAction(
@@ -323,7 +341,7 @@ class _EmployeeAttendanceTabState extends State<EmployeeAttendanceTab> {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                           decoration: BoxDecoration(color: const Color(0xFF2563EB).withOpacity(0.1), borderRadius: BorderRadius.circular(20)),
-                          child: Text(now, style: const TextStyle(color: Color(0xFF2563EB), fontWeight: FontWeight.bold, fontSize: 12)),
+                          child: Text(nowTimeStr, style: const TextStyle(color: Color(0xFF2563EB), fontWeight: FontWeight.bold, fontSize: 12)),
                         ),
                       ],
                     ),
@@ -343,8 +361,15 @@ class _EmployeeAttendanceTabState extends State<EmployeeAttendanceTab> {
                             icon: Icons.login_rounded,
                             title: 'Masuk Kantor',
                             time: att?['check_in_time']?.toString().substring(11, 16) ?? '--:--',
-                            status: hasCheckedIn ? 'Success' : 'Ready',
-                            color: hasCheckedIn ? const Color(0xFF2E7D32) : Colors.grey.shade400,
+                            status: () {
+                              if (hasCheckedIn) return displayStatus == 'LATE' ? 'Terlambat' : 'Hadir';
+                              if (displayStatus == 'NOT_STARTED') return 'Belum Mulai';
+                              if (displayStatus == 'ABSENT') return 'Alpha';
+                              return 'Ready';
+                            }(),
+                            color: hasCheckedIn 
+                                ? (displayStatus == 'LATE' ? Colors.orange : const Color(0xFF2E7D32)) 
+                                : (displayStatus == 'ABSENT' ? Colors.red : Colors.grey.shade400),
                             isFirst: true,
                           ),
                           Divider(height: 1, color: Colors.grey.shade100, indent: 20, endIndent: 20),
@@ -352,8 +377,14 @@ class _EmployeeAttendanceTabState extends State<EmployeeAttendanceTab> {
                             icon: Icons.logout_rounded,
                             title: 'Pulang Kantor',
                             time: att?['check_out_time']?.toString().substring(11, 16) ?? '--:--',
-                            status: hasCheckedOut ? 'Success' : (hasCheckedIn ? 'Ready' : 'Wait'),
-                            color: hasCheckedOut ? const Color(0xFF1E3A8A) : Colors.grey.shade400,
+                            status: () {
+                              if (hasCheckedOut) return 'Selesai';
+                              if (displayStatus == 'EARLY_LEAVE') return 'Tanpa Absen';
+                              return hasCheckedIn ? 'Ready' : 'Wait';
+                            }(),
+                            color: hasCheckedOut 
+                                ? const Color(0xFF1E3A8A) 
+                                : (displayStatus == 'EARLY_LEAVE' ? Colors.red : Colors.grey.shade400),
                             isFirst: false,
                           ),
                         ],
@@ -376,7 +407,9 @@ class _EmployeeAttendanceTabState extends State<EmployeeAttendanceTab> {
                             Expanded(
                               child: Text(
                                 'Jam: ${settings['check_in_start']} - ${settings['check_in_end']} (In)\n'
-                                'Jam: ${settings['check_out_start']} - ${settings['check_out_end']} (Out)',
+                                'Jam: ${settings['check_out_start']} - ${settings['check_out_end']} (Out)\n'
+                                'Sanksi: Rp ${CurrencyInputFormatter.formatNumber((settings['alpha_penalty'] as num?)?.toInt() ?? 0)} (Alpha) / '
+                                'Rp ${CurrencyInputFormatter.formatNumber((settings['late_penalty'] as num?)?.toInt() ?? 0)} (Terlambat)',
                                 style: const TextStyle(fontSize: 12, color: Color(0xFF64748B), height: 1.5),
                               ),
                             ),
