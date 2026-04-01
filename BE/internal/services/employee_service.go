@@ -18,23 +18,23 @@ func RegisterEmployee(user models.User, inviteToken string) error {
 	err := database.DB.Where("token = ?", inviteToken).First(&invite).Error
 
 	if err != nil {
-		return errors.New("INVALID_BARCODE")
+		return errors.New("Barcode tidak valid")
 	}
 
 	if invite.Status == "USED" {
-		return errors.New("BARCODE_ALREADY_USED")
+		return errors.New("Barcode sudah pernah digunakan")
 	}
 
 	if time.Now().After(invite.ExpiresAt) {
 		invite.Status = "EXPIRED"
 		database.DB.Save(&invite)
-		return errors.New("BARCODE_EXPIRED")
+		return errors.New("Barcode sudah kedaluwarsa")
 	}
 
 	var existing models.User
 	database.DB.Where("email = ?", user.Email).First(&existing)
 	if existing.ID != "" {
-		return errors.New("EMAIL_ALREADY_REGISTERED")
+		return errors.New("Email sudah terdaftar")
 	}
 
 	hashPassword, _ := utils.HashPassword(user.Password)

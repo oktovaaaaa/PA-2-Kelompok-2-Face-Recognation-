@@ -14,6 +14,8 @@ class EmployeeHistoryTab extends StatefulWidget {
 
 class _EmployeeHistoryTabState extends State<EmployeeHistoryTab> {
   String _filter = 'month';
+  int? _selectedMonth;
+  int? _selectedYear;
   List<dynamic> _records = [];
   Map<String, dynamic>? _stats;
   bool _loading = false;
@@ -27,7 +29,15 @@ class _EmployeeHistoryTabState extends State<EmployeeHistoryTab> {
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      final res = await ApiClient.get('/api/employee/attendance/history?filter=$_filter');
+      String url = '/api/employee/attendance/history?';
+      if (_selectedYear != null) {
+        url += 'year=$_selectedYear';
+        if (_selectedMonth != null) url += '&month=$_selectedMonth';
+      } else {
+        url += 'filter=$_filter';
+      }
+
+      final res = await ApiClient.get(url);
       if (res.success && mounted) {
         setState(() {
           _records = res.data?['records'] ?? [];
@@ -41,10 +51,11 @@ class _EmployeeHistoryTabState extends State<EmployeeHistoryTab> {
 
   Color _statusColor(String status) {
     switch (status) {
-      case 'PRESENT': return Colors.green;
-      case 'ABSENT': return Colors.red;
-      case 'LEAVE': return Colors.orange;
-      case 'SICK': return Colors.blue;
+      case 'PRESENT': return const Color(0xFF2E7D32);
+      case 'LATE': return const Color(0xFFEA580C);
+      case 'ABSENT': return const Color(0xFFDC2626);
+      case 'LEAVE': return const Color(0xFFD97706);
+      case 'SICK': return const Color(0xFF2563EB);
       default: return Colors.grey;
     }
   }
@@ -52,6 +63,7 @@ class _EmployeeHistoryTabState extends State<EmployeeHistoryTab> {
   String _statusLabel(String status) {
     switch (status) {
       case 'PRESENT': return 'Hadir';
+      case 'LATE': return 'Terlambat';
       case 'ABSENT': return 'Alpha';
       case 'LEAVE': return 'Izin';
       case 'SICK': return 'Sakit';
@@ -59,13 +71,71 @@ class _EmployeeHistoryTabState extends State<EmployeeHistoryTab> {
     }
   }
 
+  void _showFilterPicker() async {
+    int? tempMonth = _selectedMonth ?? DateTime.now().month;
+    int? tempYear = _selectedYear ?? DateTime.now().year;
+
+    await showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Pilih Periode', style: TextStyle(fontWeight: FontWeight.bold)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DropdownButtonFormField<int>(
+                value: tempMonth,
+                decoration: const InputDecoration(labelText: 'Bulan'),
+                items: List.generate(12, (i) => DropdownMenuItem(
+                  value: i + 1,
+                  child: Text([
+                    'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+                    'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+                  ][i]),
+                )),
+                onChanged: (v) => setDialogState(() => tempMonth = v),
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<int>(
+                value: tempYear,
+                decoration: const InputDecoration(labelText: 'Tahun'),
+                items: List.generate(5, (i) => DropdownMenuItem(
+                  value: DateTime.now().year - i,
+                  child: Text('${DateTime.now().year - i}'),
+                )),
+                onChanged: (v) => setDialogState(() => tempYear = v),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Batal')),
+            ElevatedButton(
+              onPressed: () {
+                setState(() {
+                  _selectedMonth = tempMonth;
+                  _selectedYear = tempYear;
+                  _filter = '';
+                });
+                Navigator.pop(context);
+                _load();
+              },
+              child: const Text('Terapkan'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final present = _stats?['present'] ?? 0;
+    final lateCount = _stats?['late'] ?? 0;
     final absent = _stats?['absent'] ?? 0;
     final leave = _stats?['leave'] ?? 0;
     final sick = _stats?['sick'] ?? 0;
     final total = _stats?['total'] ?? 0;
+
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light.copyWith(
         statusBarColor: Colors.transparent,
@@ -92,14 +162,29 @@ class _EmployeeHistoryTabState extends State<EmployeeHistoryTab> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Riwayat Presensi',
-                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Lacak performa kehadiran Anda',
-                    style: TextStyle(fontSize: 13, color: Colors.white.withOpacity(0.75)),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Riwayat Presensi',
+                            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white),
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            'Lacak performa kehadiran Anda',
+                            style: TextStyle(fontSize: 13, color: Colors.white70),
+                          ),
+                        ],
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.filter_list_rounded, color: Colors.white),
+                        onPressed: _showFilterPicker,
+                        tooltip: 'Filter Kustom',
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 24),
                   // Premium Filter Pills inside header
@@ -109,7 +194,14 @@ class _EmployeeHistoryTabState extends State<EmployeeHistoryTab> {
                         Padding(
                           padding: const EdgeInsets.only(right: 8, bottom: 20),
                           child: GestureDetector(
-                            onTap: () { setState(() => _filter = f.$1); _load(); },
+                            onTap: () {
+                              setState(() {
+                                _filter = f.$1;
+                                _selectedMonth = null;
+                                _selectedYear = null;
+                              });
+                              _load();
+                            },
                             child: AnimatedContainer(
                               duration: const Duration(milliseconds: 200),
                               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -126,6 +218,28 @@ class _EmployeeHistoryTabState extends State<EmployeeHistoryTab> {
                                 ),
                               ),
                             ),
+                          ),
+                        ),
+                      if (_selectedYear != null)
+                         Padding(
+                          padding: const EdgeInsets.only(bottom: 20),
+                          child: Chip(
+                            label: Text(
+                              _selectedMonth != null ? '${_selectedMonth}/${_selectedYear}' : '$_selectedYear',
+                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+                            ),
+                            backgroundColor: Colors.white.withOpacity(0.2),
+                            onDeleted: () {
+                              setState(() {
+                                _selectedMonth = null;
+                                _selectedYear = null;
+                                _filter = 'month';
+                              });
+                              _load();
+                            },
+                            deleteIconColor: Colors.white70,
+                            side: BorderSide.none,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                           ),
                         ),
                     ],
@@ -172,6 +286,7 @@ class _EmployeeHistoryTabState extends State<EmployeeHistoryTab> {
                                       centerSpaceRadius: 40,
                                       sections: [
                                         if (present > 0) PieChartSectionData(value: present.toDouble(), color: const Color(0xFF2E7D32), title: '$present', radius: 45, titleStyle: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                        if (lateCount > 0) PieChartSectionData(value: lateCount.toDouble(), color: const Color(0xFFEA580C), title: '$lateCount', radius: 45, titleStyle: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                                         if (absent > 0) PieChartSectionData(value: absent.toDouble(), color: const Color(0xFFDC2626), title: '$absent', radius: 45, titleStyle: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                                         if (leave > 0) PieChartSectionData(value: leave.toDouble(), color: const Color(0xFFD97706), title: '$leave', radius: 45, titleStyle: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                                         if (sick > 0) PieChartSectionData(value: sick.toDouble(), color: const Color(0xFF2563EB), title: '$sick', radius: 45, titleStyle: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
@@ -186,6 +301,7 @@ class _EmployeeHistoryTabState extends State<EmployeeHistoryTab> {
                                   alignment: WrapAlignment.center,
                                   children: [
                                     _legendItem(const Color(0xFF2E7D32), 'Hadir', present),
+                                    _legendItem(const Color(0xFFEA580C), 'Terlambat', lateCount),
                                     _legendItem(const Color(0xFFDC2626), 'Alpha', absent),
                                     _legendItem(const Color(0xFFD97706), 'Izin', leave),
                                     _legendItem(const Color(0xFF2563EB), 'Sakit', sick),
@@ -232,7 +348,20 @@ class _EmployeeHistoryTabState extends State<EmployeeHistoryTab> {
                                   child: Icon(Icons.event_available_rounded, color: color, size: 22),
                                 ),
                                 title: Text(rec['date'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF0F172A))),
-                                subtitle: Text('$checkIn - $checkOut', style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+                                subtitle: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text('$checkIn - $checkOut', style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+                                    if ((rec['salary_deduction'] ?? 0) > 0)
+                                      Padding(
+                                        padding: const EdgeInsets.only(top: 4),
+                                        child: Text(
+                                          '- Rp ${(rec['salary_deduction'] as num).toInt().toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]}.')}',
+                                          style: const TextStyle(color: Color(0xFFDC2626), fontSize: 12, fontWeight: FontWeight.bold),
+                                        ),
+                                      ),
+                                  ],
+                                ),
                                 trailing: Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                   decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(20)),

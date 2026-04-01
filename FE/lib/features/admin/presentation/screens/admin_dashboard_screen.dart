@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import '../../../../core/storage/session_storage.dart';
 import '../../../auth/presentation/screens/landing_screen.dart';
+import '../../../common/widgets/premium_bottom_nav.dart';
 import 'tabs/admin_home_tab.dart';
 import 'tabs/admin_leave_tab.dart';
 import 'tabs/admin_position_tab.dart';
@@ -85,61 +86,17 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         index: _currentIndex,
         children: _tabs,
       ),
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 20,
-              offset: const Offset(0, -5),
-            )
-          ],
-        ),
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: List.generate(
-                labels.length,
-                (i) => GestureDetector(
-                  onTap: () => setState(() => _currentIndex = i),
-                  behavior: HitTestBehavior.opaque,
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 300),
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: _currentIndex == i ? const Color(0xFF0F172A) : Colors.transparent,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          icons[i],
-                          color: _currentIndex == i ? Colors.white : Colors.grey.shade400,
-                          size: 24,
-                        ),
-                        if (_currentIndex == i) ...[
-                          const SizedBox(width: 8),
-                          Text(
-                            labels[i],
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ]
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
+      extendBody: false,
+      bottomNavigationBar: PremiumBottomNav(
+        currentIndex: _currentIndex,
+        onTap: (i) => setState(() => _currentIndex = i),
+        items: [
+          BottomNavItem(icon: Icons.home_rounded, label: 'Beranda'),
+          BottomNavItem(icon: Icons.assignment_rounded, label: 'Perizinan'),
+          BottomNavItem(icon: Icons.work_rounded, label: 'Jabatan'),
+          BottomNavItem(icon: Icons.people_rounded, label: 'Karyawan'),
+          BottomNavItem(icon: Icons.person_rounded, label: 'Profil'),
+        ],
       ),
     );
   }

@@ -10,6 +10,8 @@ import (
 	"employee-system/internal/models"
 	"employee-system/internal/utils"
 
+	"strconv"
+
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
@@ -100,7 +102,6 @@ func CheckOut(c *gin.Context) {
 	}
 
 	att.CheckOutTime = &now
-	att.Status = "PRESENT"
 	database.DB.Save(&att)
 
 	utils.Success(c, "Check-out berhasil", gin.H{
@@ -140,13 +141,22 @@ func GetTodayAttendance(c *gin.Context) {
 		}
 	}
 
+	// Hitung total denda bulan ini untuk estimasi gaji
+	var totalDeductionMonth float64
+	currentMonth := now.Format("2006-01")
+	database.DB.Model(&models.Attendance{}).
+		Where("user_id = ? AND date LIKE ?", emp.ID, currentMonth+"%").
+		Select("SUM(salary_deduction)").
+		Row().Scan(&totalDeductionMonth)
+
 	utils.Success(c, "Status absensi hari ini", gin.H{
-		"date":           today,
-		"attendance":     att,
-		"has_record":     err == nil,
-		"settings":       settings,
-		"current_time":   now.Format("15:04:05"),
-		"display_status": displayStatus,
+		"date":                   today,
+		"attendance":             att,
+		"has_record":             err == nil,
+		"settings":               settings,
+		"current_time":           now.Format("15:04:05"),
+		"display_status":         displayStatus,
+		"total_deduction_month": totalDeductionMonth,
 	})
 }
 
@@ -156,15 +166,34 @@ func GetMyAttendanceHistory(c *gin.Context) {
 	userCtx, _ := c.Get("user")
 	emp := userCtx.(models.User)
 
-	filter := c.DefaultQuery("filter", "month")
-	start := getFilterStart(filter)
+	filter := c.Query("filter")
+	month := c.Query("month")
+	year := c.Query("year")
+
+	query := database.DB.Where("user_id = ?", emp.ID)
+
+	if year != "" {
+		if month != "" {
+			mInt, _ := strconv.Atoi(month)
+			pattern := fmt.Sprintf("%s-%02d%%", year, mInt)
+			query = query.Where("date LIKE ?", pattern)
+		} else {
+			pattern := fmt.Sprintf("%s-%%", year)
+			query = query.Where("date LIKE ?", pattern)
+		}
+	} else {
+		if filter == "" {
+			filter = "month"
+		}
+		start := getFilterStart(filter)
+		query = query.Where("date >= ?", start)
+	}
 
 	var records []models.Attendance
-	database.DB.Where("user_id = ? AND date >= ?", emp.ID, start).
-		Order("date desc").Find(&records)
+	query.Order("date desc").Find(&records)
 
 	// Hitung statistik
-	var present, absent, leave, sick int
+	var present, absent, leave, sick, late int
 	for _, r := range records {
 		switch r.Status {
 		case "PRESENT":
@@ -175,6 +204,8 @@ func GetMyAttendanceHistory(c *gin.Context) {
 			leave++
 		case "SICK":
 			sick++
+		case "LATE":
+			late++
 		}
 	}
 
@@ -185,6 +216,7 @@ func GetMyAttendanceHistory(c *gin.Context) {
 			"absent":  absent,
 			"leave":   leave,
 			"sick":    sick,
+			"late":    late,
 			"total":   len(records),
 		},
 	})

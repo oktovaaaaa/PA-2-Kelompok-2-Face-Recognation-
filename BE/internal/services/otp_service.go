@@ -46,11 +46,11 @@ func VerifyOTP(email string, code string) error {
 	).First(&otp).Error
 
 	if err != nil {
-		return fmt.Errorf("INVALID_OTP")
+		return fmt.Errorf("Kode OTP tidak valid")
 	}
 
 	if time.Now().After(otp.ExpiresAt) {
-		return fmt.Errorf("OTP_EXPIRED")
+		return fmt.Errorf("Kode OTP sudah kedaluwarsa")
 	}
 
 	otp.Used = true

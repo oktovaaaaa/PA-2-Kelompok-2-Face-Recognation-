@@ -207,18 +207,18 @@ func VerifyLoginOTP(c *gin.Context) {
 	database.DB.Where("email = ?", body.Email).First(&user)
 
 	if user.Status == "PENDING" {
-		utils.Error(c, "ACCOUNT_PENDING")
+		utils.Error(c, "Akun Anda masih dalam status menunggu persetujuan admin")
 		return
 	}
 	if user.Status == "REJECTED" {
-		utils.Error(c, "ACCOUNT_REJECTED")
+		utils.Error(c, "Akun Anda telah ditolak oleh admin")
 		return
 	}
 
 	// Device Binding Logic (Hanya untuk KARYAWAN)
 	if user.Role != "ADMIN" {
 		if user.DeviceID != "" && user.DeviceID != body.DeviceID {
-			utils.Error(c, "ACCOUNT_ALREADY_ACTIVE_ON_ANOTHER_DEVICE")
+			utils.Error(c, "Akun ini sudah aktif di perangkat lain")
 			return
 		}
 
@@ -264,16 +264,16 @@ func GoogleLogin(c *gin.Context) {
 	err = database.DB.Where("email = ?", email).First(&user).Error
 
 	if err != nil {
-		utils.Error(c, "GOOGLE_ACCOUNT_NOT_REGISTERED")
+		utils.Error(c, "Akun Google ini belum terdaftar di sistem")
 		return
 	}
 
 	if user.Status == "PENDING" {
-		utils.Error(c, "ACCOUNT_PENDING")
+		utils.Error(c, "Akun Anda masih dalam status menunggu persetujuan admin")
 		return
 	}
 	if user.Status == "REJECTED" {
-		utils.Error(c, "ACCOUNT_REJECTED")
+		utils.Error(c, "Akun Anda telah ditolak oleh admin")
 		return
 	}
 
@@ -321,7 +321,7 @@ func LoginPin(c *gin.Context) {
 	// Device Binding Logic (Hanya untuk KARYAWAN)
 	if user.Role != "ADMIN" {
 		if user.DeviceID != "" && user.DeviceID != body.DeviceID {
-			utils.Error(c, "ACCOUNT_ALREADY_ACTIVE_ON_ANOTHER_DEVICE")
+			utils.Error(c, "Akun ini sudah aktif di perangkat lain")
 			return
 		}
 

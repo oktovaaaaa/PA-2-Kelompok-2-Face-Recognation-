@@ -21,7 +21,7 @@ func LoginWithPin(userID string, pin string) (models.User, error) {
 	}
 
 	if user.PinLockedUntil != nil && time.Now().Before(*user.PinLockedUntil) {
-		return user, errors.New("PIN_LOCKED")
+		return user, errors.New("PIN sedang terkunci, silakan coba lagi nanti")
 	}
 
 	if !utils.CheckPin(pin, user.Pin) {
@@ -31,7 +31,7 @@ func LoginWithPin(userID string, pin string) (models.User, error) {
 			user.PinLockedUntil = &lockedUntil
 		}
 		database.DB.Save(&user)
-		return user, errors.New("INVALID_PIN")
+		return user, errors.New("PIN yang Anda masukkan salah")
 	}
 
 	// Reset attempts on successful PIN

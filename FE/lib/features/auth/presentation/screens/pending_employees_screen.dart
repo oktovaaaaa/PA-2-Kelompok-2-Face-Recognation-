@@ -39,6 +39,8 @@ class _PendingEmployeesScreenState extends State<PendingEmployeesScreen> {
   Future<void> _approve(String userId) async {
     try {
       await _repo.approveEmployee(userId);
+      if (!mounted) return;
+      AppDialog.showSuccess(context, 'Karyawan berhasil disetujui');
       await _load();
     } catch (e) {
       final msg = ErrorMapper.map(e);
@@ -50,6 +52,8 @@ class _PendingEmployeesScreenState extends State<PendingEmployeesScreen> {
   Future<void> _reject(String userId) async {
     try {
       await _repo.rejectEmployee(userId);
+      if (!mounted) return;
+      AppDialog.showSuccess(context, 'Karyawan telah ditolak');
       await _load();
     } catch (e) {
       final msg = ErrorMapper.map(e);
@@ -61,33 +65,136 @@ class _PendingEmployeesScreenState extends State<PendingEmployeesScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: const Text('Pending Employees'),
+        centerTitle: true,
+        title: const Text(
+          'Persetujuan Karyawan',
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF0F172A)),
+        ),
+        elevation: 0,
+        backgroundColor: Colors.transparent,
+        foregroundColor: const Color(0xFF0F172A),
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator(color: Color(0xFF3B82F6)))
           : _users.isEmpty
-              ? const Center(child: Text('Tidak ada karyawan pending.'))
-              : ListView.separated(
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.people_alt_rounded, size: 80, color: Colors.grey.shade300),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Tidak ada antrian persetujuan',
+                        style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 16),
+                      ),
+                      Text(
+                        'Semua pengajuan sudah diproses',
+                        style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                      ),
+                    ],
+                  ),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.all(16),
                   itemCount: _users.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
                   itemBuilder: (context, index) {
                     final item = _users[index];
-                    return ListTile(
-                      title: Text(item.name.isEmpty ? item.email : item.name),
-                      subtitle: Text(item.email),
-                      trailing: Wrap(
-                        spacing: 8,
-                        children: [
-                          FilledButton(
-                            onPressed: () => _approve(item.id),
-                            child: const Text('Approve'),
-                          ),
-                          OutlinedButton(
-                            onPressed: () => _reject(item.id),
-                            child: const Text('Reject'),
+                    final name = item.name.isEmpty ? item.email : item.name;
+                    final initial = name.isNotEmpty ? name[0].toUpperCase() : '?';
+
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.04),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
                           ),
                         ],
+                        border: Border.all(color: Colors.grey.shade100),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          children: [
+                            Row(
+                              children: [
+                                CircleAvatar(
+                                  radius: 26,
+                                  backgroundColor: const Color(0xFF3B82F6).withOpacity(0.1),
+                                  child: Text(
+                                    initial,
+                                    style: const TextStyle(
+                                      color: Color(0xFF3B82F6),
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 20,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        name,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 16,
+                                          color: Color(0xFF1E293B),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        item.email,
+                                        style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 20),
+                            const Divider(height: 1),
+                            const SizedBox(height: 12),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: TextButton.icon(
+                                    onPressed: () => _reject(item.id),
+                                    icon: const Icon(Icons.close_rounded, size: 18),
+                                    label: const Text('Tolak'),
+                                    style: TextButton.styleFrom(
+                                      foregroundColor: const Color(0xFFEF4444),
+                                      padding: const EdgeInsets.symmetric(vertical: 12),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: ElevatedButton.icon(
+                                    onPressed: () => _approve(item.id),
+                                    icon: const Icon(Icons.check_rounded, size: 18),
+                                    label: const Text('Setujui'),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFF10B981),
+                                      foregroundColor: Colors.white,
+                                      elevation: 0,
+                                      padding: const EdgeInsets.symmetric(vertical: 12),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
                     );
                   },

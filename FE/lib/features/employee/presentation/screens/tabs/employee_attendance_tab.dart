@@ -100,7 +100,10 @@ class _EmployeeAttendanceTabState extends State<EmployeeAttendanceTab> {
     final nowTimeStr = _todayData?['current_time'] ?? '--:--:--';
     final displayStatus = _todayData?['display_status'] ?? '';
     
-    final salary = _profileData?['salary'] ?? 0;
+    final baseSalary = (_profileData?['salary'] as num?)?.toDouble() ?? 0.0;
+    final totalDeductionMonth = (_todayData?['total_deduction_month'] as num?)?.toDouble() ?? 0.0;
+    final estimatedSalary = baseSalary - totalDeductionMonth;
+
     final position = (_profileData?['position_name'] ?? 'Karyawan').toString();
     final isDoneForDay = hasCheckedIn && hasCheckedOut;
 
@@ -164,6 +167,30 @@ class _EmployeeAttendanceTabState extends State<EmployeeAttendanceTab> {
                     ),
                   ),
                   const SizedBox(width: 12),
+                  Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      IconButton(
+                        onPressed: () {}, // Future action
+                        icon: const Icon(Icons.notifications_none_rounded, color: Colors.white, size: 28),
+                      ),
+                      Positioned(
+                        top: 8,
+                        right: 8,
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                          constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                          child: const Text(
+                            '1',
+                            style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(width: 4),
                   Container(
                     padding: const EdgeInsets.all(2),
                     decoration: BoxDecoration(
@@ -246,7 +273,7 @@ class _EmployeeAttendanceTabState extends State<EmployeeAttendanceTab> {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            _formatRp(salary),
+                            _formatRp(estimatedSalary.toInt()),
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 32,

@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import '../../../../core/storage/session_storage.dart';
 import '../../../auth/presentation/screens/landing_screen.dart';
+import '../../../common/widgets/premium_bottom_nav.dart';
 import 'tabs/employee_attendance_tab.dart';
 import 'tabs/employee_history_tab.dart';
 import 'tabs/employee_leave_tab.dart';
@@ -27,6 +28,7 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
       const EmployeeHistoryTab(),
       const EmployeeLeaveTab(),
       const EmployeeProfileTab(),
+      const Center(child: Text('Layanan Pesan (Segera Hadir)')),
     ];
   }
 
@@ -59,73 +61,20 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final labels = ['Beranda', 'Riwayat', 'Izin', 'Pengaturan'];
-    final icons = [
-      Icons.account_balance_wallet_rounded,
-      Icons.receipt_long_rounded,
-      Icons.assignment_turned_in_rounded,
-      Icons.settings_rounded,
-    ];
-
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
-      // Hide standard appBar since we will build custom header in tabs
+      extendBody: false,
       body: IndexedStack(index: _currentIndex, children: _tabs),
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 20,
-              offset: const Offset(0, -5),
-            )
-          ],
-        ),
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: List.generate(
-                labels.length,
-                (i) => GestureDetector(
-                  onTap: () => setState(() => _currentIndex = i),
-                  behavior: HitTestBehavior.opaque,
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 300),
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: _currentIndex == i ? const Color(0xFF0F172A) : Colors.transparent,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          icons[i],
-                          color: _currentIndex == i ? Colors.white : Colors.grey.shade400,
-                          size: 24,
-                        ),
-                        if (_currentIndex == i) ...[
-                          const SizedBox(width: 8),
-                          Text(
-                            labels[i],
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ]
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
+      bottomNavigationBar: PremiumBottomNav(
+        currentIndex: _currentIndex,
+        onTap: (i) => setState(() => _currentIndex = i),
+        items: [
+          BottomNavItem(icon: Icons.account_balance_wallet_rounded, label: 'Beranda'),
+          BottomNavItem(icon: Icons.receipt_long_rounded, label: 'Riwayat'),
+          BottomNavItem(icon: Icons.assignment_turned_in_rounded, label: 'Izin'),
+          BottomNavItem(icon: Icons.person_rounded, label: 'Profil'),
+          BottomNavItem(icon: Icons.chat_bubble_outline_rounded, label: 'Pesan'),
+        ],
       ),
     );
   }

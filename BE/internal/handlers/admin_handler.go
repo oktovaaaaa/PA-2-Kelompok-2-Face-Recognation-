@@ -49,13 +49,13 @@ func ValidateInvite(c *gin.Context) {
 
 	if err != nil {
 
-		utils.Error(c, "INVALID_BARCODE")
+		utils.Error(c, "Barcode tidak valid")
 		return
 	}
 
 	if invite.Status == "USED" {
 
-		utils.Error(c, "BARCODE_ALREADY_USED")
+		utils.Error(c, "Barcode sudah pernah digunakan")
 		return
 	}
 
@@ -63,7 +63,7 @@ func ValidateInvite(c *gin.Context) {
 
 		invite.Status = "EXPIRED"
 		database.DB.Save(&invite)
-		utils.Error(c, "BARCODE_EXPIRED")
+		utils.Error(c, "Barcode sudah kedaluwarsa")
 		return
 	}
 

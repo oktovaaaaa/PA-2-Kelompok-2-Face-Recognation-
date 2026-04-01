@@ -18,7 +18,7 @@ func RegisterAdmin(user models.User, company models.Company) error {
 
 	database.DB.Where("email = ?", user.Email).First(&existing)
 	if existing.ID != "" {
-		return errors.New("EMAIL_ALREADY_REGISTERED")
+		return errors.New("Email sudah terdaftar")
 	}
 
 	hashPassword, _ := utils.HashPassword(user.Password)
@@ -130,7 +130,7 @@ func LoginWithDevice(email string, password string, deviceID string) (models.Use
 	}
 
 	if user.DeviceID != "" && user.DeviceID != deviceID {
-		return user, errors.New("ACCOUNT_ALREADY_ACTIVE_ON_ANOTHER_DEVICE")
+		return user, errors.New("Akun sudah aktif di perangkat lain")
 	}
 
 	if user.DeviceID == "" {
@@ -144,7 +144,7 @@ func LoginWithDevice(email string, password string, deviceID string) (models.Use
 func GenerateResetOTP(email string) (string, error) {
 	var user models.User
 	if err := database.DB.Where("email = ?", email).First(&user).Error; err != nil {
-		return "", errors.New("EMAIL_NOT_FOUND")
+		return "", errors.New("Email tidak terdaftar")
 	}
 
 	code := fmt.Sprintf("%06d", rand.Intn(999999))
@@ -165,7 +165,7 @@ func GenerateResetOTP(email string) (string, error) {
 func ResetPassword(email string, newPassword string) error {
 	var user models.User
 	if err := database.DB.Where("email = ?", email).First(&user).Error; err != nil {
-		return errors.New("USER_NOT_FOUND")
+		return errors.New("Pengguna tidak ditemukan")
 	}
 
 	hashPassword, _ := utils.HashPassword(newPassword)

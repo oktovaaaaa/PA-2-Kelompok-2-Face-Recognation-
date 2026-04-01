@@ -178,6 +178,30 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
                   ),
                 ),
                 const SizedBox(width: 12),
+                Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    IconButton(
+                      onPressed: () {}, // Future action
+                      icon: const Icon(Icons.notifications_none_rounded, color: Colors.white, size: 28),
+                    ),
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                        constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                        child: const Text(
+                          '3',
+                          style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(width: 4),
                 Container(
                   padding: const EdgeInsets.all(2),
                   decoration: BoxDecoration(

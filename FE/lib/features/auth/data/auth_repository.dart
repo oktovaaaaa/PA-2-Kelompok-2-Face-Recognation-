@@ -176,7 +176,7 @@ class AuthRepository {
     final deviceId = await SessionStorage.getOrCreateDeviceId();
 
     final res = await ApiClient.post('/auth/login-pin', {
-      'userID': userId,
+      'user_id': userId,
       'pin': pin,
       'device_id': deviceId,
     });
@@ -277,7 +277,7 @@ class AuthRepository {
 
   Future<void> approveEmployee(String userId) async {
     final res = await ApiClient.post('/admin/approve-employee', {
-      'UserID': userId,
+      'user_id': userId,
     });
 
     if (!res.status) {
@@ -287,7 +287,7 @@ class AuthRepository {
 
   Future<void> rejectEmployee(String userId) async {
     final res = await ApiClient.post('/admin/reject-employee', {
-      'UserID': userId,
+      'user_id': userId,
     });
 
     if (!res.status) {
@@ -297,7 +297,7 @@ class AuthRepository {
 
   Future<void> resetDeviceBinding(String userId) async {
     final res = await ApiClient.post('/admin/reset-device', {
-      'UserID': userId,
+      'user_id': userId,
     });
 
     if (!res.status) {
