@@ -31,13 +31,13 @@ func CheckIn(c *gin.Context) {
 		return
 	}
 
-	// Validasi waktu check-in: Mulai setelah CheckInStart dan sebelum CheckOutStart dimulai
+	// Validasi waktu check-in: Mulai setelah CheckInStart dan sebelum jam pulang berakhir (CheckOutEnd)
 	if now.Before(parseT(today, settings.CheckInStart, now.Location())) {
 		utils.Error(c, fmt.Sprintf("Absensi masuk belum dibuka. Mulai jam %s", settings.CheckInStart))
 		return
 	}
-	if now.Equal(parseT(today, settings.CheckOutStart, now.Location())) || now.After(parseT(today, settings.CheckOutStart, now.Location())) {
-		utils.Error(c, "Batas waktu check-in sudah habis (sudah masuk jam pulang)")
+	if now.After(parseT(today, settings.CheckOutEnd, now.Location())) {
+		utils.Error(c, "Batas waktu absensi untuk hari ini sudah berakhir (Alpha)")
 		return
 	}
 
@@ -76,8 +76,12 @@ func CheckOut(c *gin.Context) {
 	// Ambil pengaturan jam absensi
 	var settings models.AttendanceSettings
 	if err := database.DB.Where("company_id = ?", emp.CompanyID).First(&settings).Error; err != nil {
-		utils.Error(c, "Pengaturan absensi belum dikonfigurasi")
-		return
+		settings = models.AttendanceSettings{
+			CheckInStart:  "07:00",
+			CheckInEnd:    "09:00",
+			CheckOutStart: "16:00",
+			CheckOutEnd:   "18:00",
+		}
 	}
 
 	// Validasi waktu check-out
@@ -119,8 +123,16 @@ func GetTodayAttendance(c *gin.Context) {
 	var att models.Attendance
 	err := database.DB.Where("user_id = ? AND date = ?", emp.ID, today).First(&att).Error
 
+	// Ambil pengaturan jam absensi (dengan fallback)
 	var settings models.AttendanceSettings
-	database.DB.Where("company_id = ?", emp.CompanyID).First(&settings)
+	if err := database.DB.Where("company_id = ?", emp.CompanyID).First(&settings).Error; err != nil {
+		settings = models.AttendanceSettings{
+			CheckInStart:  "07:00",
+			CheckInEnd:    "09:00",
+			CheckOutStart: "16:00",
+			CheckOutEnd:   "18:00",
+		}
+	}
 
 	// Hitung status tampilan dinamis
 	displayStatus := att.Status
@@ -130,10 +142,12 @@ func GetTodayAttendance(c *gin.Context) {
 	if err != nil { // Belum ada record absensi hari ini
 		if now.Before(parseT(today, settings.CheckInStart, loc)) {
 			displayStatus = "NOT_STARTED" // Label: Belum Mulai
+		} else if now.After(parseT(today, settings.CheckOutEnd, loc)) {
+			displayStatus = "ABSENT" // Label: Alpha (Hanya jika benar-benar lewat hari/jam pulang)
 		} else if now.After(parseT(today, settings.CheckInEnd, loc)) {
-			displayStatus = "ABSENT" // Label: Alpha
+			displayStatus = "LATE"   // Label: Terlambat
 		} else {
-			displayStatus = "READY" // Sesuai jam tapi belum klik
+			displayStatus = "READY"  // Siap Absen
 		}
 	} else if att.CheckOutTime == nil { // Sudah check-in tapi belum check-out
 		if now.After(parseT(today, settings.CheckOutEnd, loc)) {
@@ -223,7 +237,6 @@ func GetMyAttendanceHistory(c *gin.Context) {
 }
 
 // AdminGetAttendanceHistory — admin melihat riwayat semua karyawan
-// Query params: filter=week|month|year, user_id (opsional)
 func AdminGetAttendanceHistory(c *gin.Context) {
 	userCtx, _ := c.Get("user")
 	adminUser := userCtx.(models.User)
@@ -232,46 +245,184 @@ func AdminGetAttendanceHistory(c *gin.Context) {
 	endDate := c.Query("end_date")
 	filter := c.DefaultQuery("filter", "month")
 	userID := c.Query("user_id")
+	statusFilter := c.Query("status") // Misal: PRESENT, LATE, ABSENT, LEAVE, SICK
 
-	query := database.DB.Where("company_id = ?", adminUser.CompanyID)
+	now := time.Now()
+	loc := now.Location()
+	today := now.Format("2006-01-02")
+
+	// Ambil Pengaturan (dengan fallback default agar tidak Alpha prematur)
+	var settings models.AttendanceSettings
+	if err := database.DB.Where("company_id = ?", adminUser.CompanyID).First(&settings).Error; err != nil {
+		settings = models.AttendanceSettings{
+			CheckInStart:  "07:00",
+			CheckInEnd:    "09:00",
+			CheckOutStart: "16:00",
+			CheckOutEnd:   "18:00",
+		}
+	}
+	checkOutEndT := parseT(today, settings.CheckOutEnd, loc)
+
+	// Cari tanggal absensi pertama kali di perusahaan ini sebagai batas awal "System Active"
+	var firstRecordDate string
+	database.DB.Model(&models.Attendance{}).Where("company_id = ?", adminUser.CompanyID).Order("date asc").Limit(1).Select("date").Scan(&firstRecordDate)
+
+	// 1. Ambil Semua Karyawan Aktif Perusahaan ini
+	var employees []models.User
+	empQuery := database.DB.Where("company_id = ? AND role = ? AND status = ?", adminUser.CompanyID, "EMPLOYEE", "ACTIVE")
+	if userID != "" {
+		empQuery = empQuery.Where("id = ?", userID)
+	}
+	empQuery.Find(&employees)
+
+	// 2. Tentukan Rentang Tanggal
+	var start, end string
+	specificMonth := c.Query("month") // 1-12
+	specificYear := c.Query("year")   // e.g. 2024
 
 	if startDate != "" && endDate != "" {
-		query = query.Where("date >= ? AND date <= ?", startDate, endDate)
+		start = startDate
+		end = endDate
+	} else if filter == "year" && specificYear != "" {
+		start = fmt.Sprintf("%s-01-01", specificYear)
+		end = fmt.Sprintf("%s-12-31", specificYear)
+	} else if filter == "month" && specificMonth != "" {
+		yearStr := specificYear
+		if yearStr == "" {
+			yearStr = fmt.Sprintf("%d", now.Year())
+		}
+		monthInt, _ := strconv.Atoi(specificMonth)
+		// Cari tanggal terakhir dari bulan tersebut
+		firstDay := time.Date(now.Year(), time.Month(monthInt), 1, 0, 0, 0, 0, loc)
+		if specificYear != "" {
+			y, _ := strconv.Atoi(specificYear)
+			firstDay = time.Date(y, time.Month(monthInt), 1, 0, 0, 0, 0, loc)
+		}
+		lastDay := firstDay.AddDate(0, 1, -1)
+		
+		start = firstDay.Format("2006-01-02")
+		end = lastDay.Format("2006-01-02")
 	} else {
-		start := getFilterStart(filter)
-		query = query.Where("date >= ?", start)
+		start = getFilterStart(filter)
+		end = today
 	}
 
+	// 3. Ambil Data Absensi yang Ada dari DB
+	query := database.DB.Where("company_id = ? AND date >= ? AND date <= ?", adminUser.CompanyID, start, end)
 	if userID != "" {
 		query = query.Where("user_id = ?", userID)
 	}
-
 	var records []models.Attendance
 	query.Order("date desc").Find(&records)
 
-	// Attach user info ke setiap record
-	type AttendanceWithUser struct {
+	// Buat map untuk memudahkan pengecekan: date -> user_id -> record
+	recordMap := make(map[string]map[string]models.Attendance)
+	for _, r := range records {
+		if recordMap[r.Date] == nil {
+			recordMap[r.Date] = make(map[string]models.Attendance)
+		}
+		recordMap[r.Date][r.UserID] = r
+	}
+
+	// 4. Struktur Hasil
+	type AttendanceResult struct {
 		models.Attendance
 		UserName  string `json:"user_name"`
 		UserEmail string `json:"user_email"`
+		IsVirtual bool   `json:"is_virtual"` // Penanda data ini Alpha otomatis
 	}
+	var finalResult []AttendanceResult
 
-	var result []AttendanceWithUser
-	userCache := map[string]models.User{}
-	for _, r := range records {
-		u, ok := userCache[r.UserID]
-		if !ok {
-			database.DB.Select("name, email").Where("id = ?", r.UserID).First(&u)
-			userCache[r.UserID] = u
+	// Iterasi Hari dari 'end' ke 'start' (Terbaru ke Terlama)
+	curr, _ := time.ParseInLocation("2006-01-02", end, loc)
+	limit, _ := time.ParseInLocation("2006-01-02", start, loc)
+
+	for !curr.Before(limit) {
+		dateStr := curr.Format("2006-01-02")
+		
+		// Lewati jika sebelum sistem aktif (absen pertama perusahaan)
+		if firstRecordDate != "" && dateStr < firstRecordDate {
+			curr = curr.AddDate(0, 0, -1)
+			continue
 		}
-		result = append(result, AttendanceWithUser{
-			Attendance: r,
-			UserName:   u.Name,
-			UserEmail:  u.Email,
-		})
+		
+		for _, emp := range employees {
+			att, exists := recordMap[dateStr][emp.ID]
+			
+			if exists {
+				// Deteksi status dinamis untuk riwayat (WORKING / EARLY_LEAVE)
+				displayStatus := att.Status
+				isPastTime := dateStr < today || (dateStr == today && now.After(checkOutEndT))
+				
+				if att.CheckInTime != nil && att.CheckOutTime == nil {
+					if isPastTime {
+						displayStatus = "EARLY_LEAVE"
+					} else {
+						displayStatus = "WORKING"
+					}
+				}
+
+				if statusFilter == "" || displayStatus == statusFilter {
+					// Copy record agar tidak merubah data asli di Map
+					newAtt := att
+					newAtt.Status = displayStatus
+					
+					finalResult = append(finalResult, AttendanceResult{
+						Attendance: newAtt,
+						UserName:   emp.Name,
+						UserEmail:  emp.Email,
+						IsVirtual:  false,
+					})
+				}
+			} else {
+				// Cegah Alpha untuk tanggal sebelum karyawan didaftarkan (Gunakan Zona Waktu Lokal)
+				registrationDate := emp.CreatedAt.In(loc).Format("2006-01-02")
+				if dateStr < registrationDate {
+					continue
+				}
+
+				// Cek apakah hari ini Alpha (Sudah lewat jam pulang / Hari sudah lewat)
+				isAlpha := false
+				if dateStr < today {
+					isAlpha = true
+				} else if dateStr == today && now.After(checkOutEndT) {
+					isAlpha = true
+				}
+
+				if isAlpha && (statusFilter == "" || statusFilter == "ABSENT") {
+					finalResult = append(finalResult, AttendanceResult{
+						Attendance: models.Attendance{
+							ID:        "virtual-" + emp.ID + "-" + dateStr,
+							UserID:    emp.ID,
+							CompanyID: emp.CompanyID,
+							Date:      dateStr,
+							Status:    "ABSENT",
+						},
+						UserName:  emp.Name,
+						UserEmail:  emp.Email,
+						IsVirtual: true,
+					})
+				} else if !isAlpha && dateStr == today && (statusFilter == "" || statusFilter == "ALL") {
+					// Tambahkan entri "Belum Absen" untuk hari ini
+					finalResult = append(finalResult, AttendanceResult{
+						Attendance: models.Attendance{
+							ID:        "yet-" + emp.ID + "-" + dateStr,
+							UserID:    emp.ID,
+							CompanyID: emp.CompanyID,
+							Date:      dateStr,
+							Status:    "NOT_YET",
+						},
+						UserName:  emp.Name,
+						UserEmail:  emp.Email,
+						IsVirtual: true,
+					})
+				}
+			}
+		}
+		curr = curr.AddDate(0, 0, -1)
 	}
 
-	utils.Success(c, "Riwayat kehadiran karyawan", result)
+	utils.Success(c, "Riwayat kehadiran karyawan", finalResult)
 }
 
 // GetAttendanceSettings — admin mendapatkan pengaturan jam absensi
@@ -335,43 +486,76 @@ func UpdateAttendanceSettings(c *gin.Context) {
 func AdminGetDashboardSummary(c *gin.Context) {
 	userCtx, _ := c.Get("user")
 	admin := userCtx.(models.User)
-	today := time.Now().Format("2006-01-02")
+	now := time.Now()
+	loc := now.Location()
+	today := now.Format("2006-01-02")
 
-	var present, late, leave, sick int64
+	// Ambil pengaturan jam absensi (dengan fallback default)
+	var settings models.AttendanceSettings
+	if err := database.DB.Where("company_id = ?", admin.CompanyID).First(&settings).Error; err != nil {
+		settings = models.AttendanceSettings{
+			CheckInStart:  "07:00",
+			CheckInEnd:    "09:00",
+			CheckOutStart: "16:00",
+			CheckOutEnd:   "18:00",
+		}
+	}
+	checkOutEndT := parseT(today, settings.CheckOutEnd, loc)
 
-	// Hitung semua status dari Tabel Attendance hari ini
-	database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date = ? AND status = ?", admin.CompanyID, today, "PRESENT").Count(&present)
-	database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date = ? AND status = ?", admin.CompanyID, today, "LATE").Count(&late)
+	var present, late, leave, sick, working int64
+
+	// 1. Hitung yang sudah SELESAI (sudah check-out)
+	database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date = ? AND status = ? AND check_out_time IS NOT NULL", admin.CompanyID, today, "PRESENT").Count(&present)
+	database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date = ? AND status = ? AND check_out_time IS NOT NULL", admin.CompanyID, today, "LATE").Count(&late)
+
+	// 2. Hitung yang SEDANG BEKERJA (sudah check-in tapi belum check-out)
+	database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date = ? AND (status = ? OR status = ?) AND check_out_time IS NULL", admin.CompanyID, today, "PRESENT", "LATE").Count(&working)
+
+	// 3. Izin & Sakit
 	database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date = ? AND status = ?", admin.CompanyID, today, "LEAVE").Count(&leave)
 	database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date = ? AND status = ?", admin.CompanyID, today, "SICK").Count(&sick)
 
-	// Hitung Total Karyawan Aktif
+	// 4. Total Karyawan Aktif
 	var totalEmployees int64
 	database.DB.Model(&models.User{}).Where("company_id = ? AND status = ? AND role = ?", admin.CompanyID, "ACTIVE", "EMPLOYEE").Count(&totalEmployees)
 
-	// Hitung Alpha (Sisa karyawan yang belum absen sama sekali)
-	// Jika sebelum jam masuk, Alpha diset 0 agar dashboard tidak merah sebelum waktunya
-	var absentCount int64
-	var settings models.AttendanceSettings
-	database.DB.Where("company_id = ?", admin.CompanyID).First(&settings)
-
-	if time.Now().Before(parseT(today, settings.CheckInStart, time.Now().Location())) {
-		absentCount = 0
-	} else {
-		absentCount = totalEmployees - (present + late + leave + sick)
+	// 5. Logika Alpha vs Belum Absen vs Pulang di Jam Kerja
+	var absentCount, notYetCount, earlyLeaveCount, displayWorking int64
+	totalCheckedIn := present + late + working + leave + sick
+	notCheckedInYet := totalEmployees - totalCheckedIn
+	if notCheckedInYet < 0 {
+		notCheckedInYet = 0
 	}
 
-	if absentCount < 0 {
+	if now.After(checkOutEndT) {
+		// Jika sudah lewat jam pulang:
+		// Yang tidak absen sama sekali = ALPHA
+		// Yang check-in tapi tidak check-out = Pulang di jam kerja (early_leave)
+		absentCount = notCheckedInYet
+		earlyLeaveCount = working
+		displayWorking = 0
+		notYetCount = 0
+	} else {
+		// Jika masih dalam jam kerja:
+		// Alpha diset 0 agar dashboard tidak merah prematur
+		// Yang tidak absen = Belum Absen (not_yet)
 		absentCount = 0
+		earlyLeaveCount = 0
+		displayWorking = working
+		notYetCount = notCheckedInYet
 	}
 
 	utils.Success(c, "Dashboard summary", gin.H{
-		"present": present,
-		"late":    late,
-		"absent":  absentCount,
-		"leave":   leave,
-		"sick":    sick,
-		"total":   totalEmployees,
+		"present":            present,
+		"late":               late,
+		"absent":             absentCount,
+		"leave":              leave,
+		"sick":               sick,
+		"working":            displayWorking,
+		"not_yet":            notYetCount,
+		"early_leave":        earlyLeaveCount,
+		"total":              totalEmployees,
+		"is_after_work_hour": now.After(checkOutEndT),
 	})
 }
 

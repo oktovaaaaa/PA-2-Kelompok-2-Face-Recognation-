@@ -8,6 +8,7 @@ import 'tabs/employee_attendance_tab.dart';
 import 'tabs/employee_history_tab.dart';
 import 'tabs/employee_leave_tab.dart';
 import 'tabs/employee_profile_tab.dart';
+import 'tabs/employee_salary_tab.dart';
 
 class EmployeeDashboardScreen extends StatefulWidget {
   const EmployeeDashboardScreen({super.key});
@@ -28,7 +29,7 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
       const EmployeeHistoryTab(),
       const EmployeeLeaveTab(),
       const EmployeeProfileTab(),
-      const Center(child: Text('Layanan Pesan (Segera Hadir)')),
+      const EmployeeSalaryTab(),
     ];
   }
 
@@ -73,7 +74,7 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
           BottomNavItem(icon: Icons.receipt_long_rounded, label: 'Riwayat'),
           BottomNavItem(icon: Icons.assignment_turned_in_rounded, label: 'Izin'),
           BottomNavItem(icon: Icons.person_rounded, label: 'Profil'),
-          BottomNavItem(icon: Icons.chat_bubble_outline_rounded, label: 'Pesan'),
+          BottomNavItem(icon: Icons.payments_rounded, label: 'Gaji'),
         ],
       ),
     );

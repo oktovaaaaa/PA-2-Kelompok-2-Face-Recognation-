@@ -29,8 +29,10 @@ func GetMyProfile(c *gin.Context) {
 		Status       string  `json:"status"`
 		PositionID   string  `json:"position_id"`
 		PositionName string  `json:"position_name"`
-		Salary       float64 `json:"salary"`
-		CompanyID    string  `json:"company_id"`
+		Salary            float64 `json:"salary"`
+		CompanyID         string  `json:"company_id"`
+		BankName          string  `json:"bank_name"`
+		BankAccountNumber string  `json:"bank_account_number"`
 	}
 
 	resp := ProfileResponse{
@@ -44,8 +46,10 @@ func GetMyProfile(c *gin.Context) {
 		PhotoURL:   user.PhotoURL,
 		Role:       user.Role,
 		Status:     user.Status,
-		PositionID: "",
-		CompanyID:  user.CompanyID,
+		PositionID:         "",
+		CompanyID:          user.CompanyID,
+		BankName:           user.BankName,
+		BankAccountNumber:  user.BankAccountNumber,
 	}
 
 	if user.PositionID != nil {
@@ -70,8 +74,10 @@ func UpdateMyProfile(c *gin.Context) {
 		Phone      string `json:"phone"`
 		BirthPlace string `json:"birth_place"`
 		BirthDate  string `json:"birth_date"`
-		Address    string `json:"address"`
-		PhotoURL   string `json:"photo_url"`
+		Address           string `json:"address"`
+		PhotoURL          string `json:"photo_url"`
+		BankName          string `json:"bank_name"`
+		BankAccountNumber string `json:"bank_account_number"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		utils.Error(c, "Data tidak valid")
@@ -93,6 +99,8 @@ func UpdateMyProfile(c *gin.Context) {
 	if body.PhotoURL != "" {
 		dbUser.PhotoURL = body.PhotoURL
 	}
+	dbUser.BankName = body.BankName
+	dbUser.BankAccountNumber = body.BankAccountNumber
 
 	database.DB.Save(&dbUser)
 	utils.Success(c, "Profil berhasil diperbarui", gin.H{
@@ -100,8 +108,10 @@ func UpdateMyProfile(c *gin.Context) {
 		"phone":       dbUser.Phone,
 		"birth_place": dbUser.BirthPlace,
 		"birth_date":  dbUser.BirthDate,
-		"address":     dbUser.Address,
-		"photo_url":   dbUser.PhotoURL,
+		"address":             dbUser.Address,
+		"photo_url":           dbUser.PhotoURL,
+		"bank_name":           dbUser.BankName,
+		"bank_account_number": dbUser.BankAccountNumber,
 	})
 }
 

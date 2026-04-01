@@ -14,8 +14,8 @@ import '../../../../../core/utils/error_mapper.dart';
 import '../../../../../core/constants/app_constants.dart';
 import '../../../../auth/data/auth_repository.dart';
 import '../../../../auth/presentation/screens/pending_employees_screen.dart';
-import '../../../../auth/presentation/screens/pending_employees_screen.dart';
 import '../attendance_report_screen.dart';
+import '../admin_payroll_screen.dart';
 import '../../../../common/widgets/app_dialog.dart';
 
 class AdminHomeTab extends StatefulWidget {
@@ -32,7 +32,17 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
   String _generatedToken = '';
   final GlobalKey _qrKey = GlobalKey();
   String? _userName;
-  Map<String, dynamic> _summary = {'present': 0, 'absent': 0, 'late': 0, 'leave': 0, 'total': 0};
+  Map<String, dynamic> _summary = {
+    'present': 0,
+    'absent': 0,
+    'late': 0,
+    'leave': 0,
+    'sick': 0,
+    'working': 0,
+    'not_yet': 0,
+    'early_leave': 0,
+    'total': 0
+  };
   bool _loadingSummary = false;
   String? _photoUrl;
 
@@ -291,7 +301,7 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
                         style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
                       ),
                       const SizedBox(height: 24),
-                      if (_summary['total'] == 0 && !_loadingSummary)
+                      if ((_summary['total'] ?? 0) == 0 && !_loadingSummary)
                         Center(
                           child: Padding(
                             padding: const EdgeInsets.symmetric(vertical: 20),
@@ -311,12 +321,16 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
                                   sectionsSpace: 2,
                                   centerSpaceRadius: 25,
                                   sections: [
-                                    if (_summary['present'] > 0) PieChartSectionData(value: (_summary['present'] as num).toDouble(), color: Colors.green, radius: 20, showTitle: false),
-                                    if (_summary['late'] > 0) PieChartSectionData(value: (_summary['late'] as num).toDouble(), color: Colors.orange, radius: 20, showTitle: false),
-                                    if (_summary['absent'] > 0) PieChartSectionData(value: (_summary['absent'] as num).toDouble(), color: Colors.red, radius: 20, showTitle: false),
-                                    if (_summary['leave'] > 0) PieChartSectionData(value: (_summary['leave'] as num).toDouble(), color: Colors.blue, radius: 20, showTitle: false),
-                                    // Fallback jika semua nol (Belum mulai)
-                                    if ((_summary['present'] ?? 0) == 0 && (_summary['late'] ?? 0) == 0 && (_summary['absent'] ?? 0) == 0 && (_summary['leave'] ?? 0) == 0)
+                                    if ((_summary['present'] ?? 0) > 0) PieChartSectionData(value: (_summary['present'] as num).toDouble(), color: Colors.green, radius: 20, showTitle: false),
+                                    if ((_summary['late'] ?? 0) > 0) PieChartSectionData(value: (_summary['late'] as num).toDouble(), color: Colors.orange, radius: 20, showTitle: false),
+                                    if ((_summary['absent'] ?? 0) > 0) PieChartSectionData(value: (_summary['absent'] as num).toDouble(), color: Colors.red, radius: 20, showTitle: false),
+                                    if (((_summary['leave'] ?? 0) + (_summary['sick'] ?? 0)) > 0) PieChartSectionData(value: ((_summary['leave'] ?? 0) + (_summary['sick'] ?? 0) as num).toDouble(), color: Colors.blue, radius: 20, showTitle: false),
+                                    if ((_summary['not_yet'] ?? 0) > 0) PieChartSectionData(value: (_summary['not_yet'] as num).toDouble(), color: Colors.grey.shade300, radius: 20, showTitle: false),
+                                    if ((_summary['working'] ?? 0) > 0) PieChartSectionData(value: (_summary['working'] as num).toDouble(), color: Colors.indigo.shade300, radius: 20, showTitle: false),
+                                    if ((_summary['early_leave'] ?? 0) > 0) PieChartSectionData(value: (_summary['early_leave'] as num).toDouble(), color: Colors.deepPurple.shade300, radius: 20, showTitle: false),
+                                    
+                                    // Fallback jika semua nol
+                                    if ((_summary['total'] ?? 0) == 0)
                                       PieChartSectionData(value: 1, color: Colors.grey.shade200, radius: 20, showTitle: false),
                                   ],
                                 ),
@@ -326,13 +340,19 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
                             Expanded(
                               child: Column(
                                 children: [
-                                  _summaryItem(Colors.green, 'Hadir', _summary['present']),
+                                  _summaryItem(Colors.green, 'Hadir Tepat Waktu', _summary['present'] ?? 0),
                                   const SizedBox(height: 8),
-                                  _summaryItem(Colors.orange, 'Terlambat', _summary['late']),
+                                  _summaryItem(Colors.orange, 'Terlambat', _summary['late'] ?? 0),
                                   const SizedBox(height: 8),
-                                  _summaryItem(Colors.red, 'Alpha', _summary['absent']),
+                                  _summaryItem(Colors.indigo.shade300, 'Sedang Bekerja', _summary['working'] ?? 0),
                                   const SizedBox(height: 8),
                                   _summaryItem(Colors.blue, 'Izin/Sakit', (_summary['leave'] ?? 0) + (_summary['sick'] ?? 0)),
+                                  const SizedBox(height: 8),
+                                  _summaryItem(Colors.grey.shade400, 'Belum Hadir', _summary['not_yet'] ?? 0),
+                                  const SizedBox(height: 8),
+                                  _summaryItem(Colors.red.shade400, 'Alpha', _summary['absent'] ?? 0),
+                                  const SizedBox(height: 8),
+                                  _summaryItem(Colors.deepPurple.shade300, 'Pulang di Jam Kerja', _summary['early_leave'] ?? 0),
                                 ],
                               ),
                             ),
@@ -392,7 +412,15 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
                   ),
                 ),
                 const SizedBox(height: 16),
-
+                _buildMenuCard(
+                  context,
+                  icon: Icons.payments_rounded,
+                  color: const Color(0xFF10B981),
+                  title: 'Manajemen Gaji',
+                  subtitle: 'Proses gaji & denda bulanan',
+                  onTap: () => widget.onNavigate?.call(2),
+                ),
+                const SizedBox(height: 16),
                 _buildMenuCard(
                   context,
                   icon: Icons.person_add_rounded,

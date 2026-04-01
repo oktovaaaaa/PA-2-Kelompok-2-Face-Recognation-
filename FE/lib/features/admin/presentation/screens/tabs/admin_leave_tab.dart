@@ -81,69 +81,180 @@ class _AdminLeaveTabState extends State<AdminLeaveTab> with SingleTickerProvider
   void _showDetail(Map<String, dynamic> leave) {
     final status = leave['status'] ?? '';
     final color = _statusColors[status] ?? Colors.grey;
+    final isPending = status == 'PENDING';
+    final typeIcon = leave['type'] == 'SAKIT' ? Icons.medical_services_rounded : Icons.assignment_rounded;
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) => DraggableScrollableSheet(
-        initialChildSize: 0.6,
-        maxChildSize: 0.9,
-        minChildSize: 0.4,
-        expand: false,
-        builder: (_, sc) => ListView(
-          controller: sc,
-          padding: const EdgeInsets.all(20),
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        height: MediaQuery.of(context).size.height * 0.8,
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.only(topLeft: Radius.circular(32), topRight: Radius.circular(32)),
+        ),
+        child: Column(
           children: [
-            Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)))),
-            const SizedBox(height: 16),
-            Row(
+            const SizedBox(height: 12),
+            Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2))),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.all(24),
+                children: [
+                  // 1. Header & Status
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(16)),
+                        child: Icon(typeIcon, color: color, size: 28),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(leave['title'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF0F172A))),
+                            const SizedBox(height: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(20)),
+                              child: Text(_statusLabels[status] ?? status, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 32),
+
+                  // 2. Data Pengaju Card
+                  _buildSectionTitle('Informasi Pengaju'),
+                  const SizedBox(height: 12),
+                  _buildInfoCard([
+                    _buildInfoRow(Icons.person_outline_rounded, 'Karyawan', leave['user_name'] ?? '-'),
+                    _buildInfoRow(Icons.alternate_email_rounded, 'Email', leave['user_email'] ?? '-'),
+                  ]),
+                  const SizedBox(height: 24),
+
+                  // 3. Detail Pengajuan Card
+                  _buildSectionTitle('Detail Pengajuan'),
+                  const SizedBox(height: 12),
+                  _buildInfoCard([
+                    _buildInfoRow(Icons.category_outlined, 'Tipe Izin', leave['type'] ?? '-'),
+                    _buildInfoRow(Icons.description_outlined, 'Deskripsi', leave['description'] ?? '-', isMultiline: true),
+                  ]),
+                  const SizedBox(height: 24),
+
+                  // 4. Catatan Admin
+                  if (leave['admin_note'] != null && (leave['admin_note'] as String).isNotEmpty) ...[
+                    _buildSectionTitle('Tanggapan Admin'),
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.grey.shade200),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(Icons.info_outline_rounded, size: 20, color: Color(0xFF475569)),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              leave['admin_note'],
+                              style: const TextStyle(fontStyle: FontStyle.italic, color: Color(0xFF475569), height: 1.5),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 40),
+
+                  // 5. Action Buttons (If Pending)
+                  if (isPending)
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () { Navigator.pop(ctx); _processLeave(leave['id'], 'approve'); },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green.shade600,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                              elevation: 0,
+                            ),
+                            child: const Text('Setujui', style: TextStyle(fontWeight: FontWeight.bold)),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () { Navigator.pop(ctx); _processLeave(leave['id'], 'reject'); },
+                            style: OutlinedButton.styleFrom(
+                              side: BorderSide(color: Colors.red.shade600, width: 2),
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                            ),
+                            child: Text('Tolak', style: TextStyle(color: Colors.red.shade600, fontWeight: FontWeight.bold)),
+                          ),
+                        ),
+                      ],
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSectionTitle(String title) {
+    return Text(
+      title.toUpperCase(),
+      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1.2),
+    );
+  }
+
+  Widget _buildInfoCard(List<Widget> children) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Column(children: children),
+    );
+  }
+
+  Widget _buildInfoRow(IconData icon, String label, String value, {bool isMultiline = false}) {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        crossAxisAlignment: isMultiline ? CrossAxisAlignment.start : CrossAxisAlignment.center,
+        children: [
+          Icon(icon, size: 18, color: const Color(0xFF2563EB)),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(child: Text(leave['title'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18))),
-                Chip(
-                  label: Text(_statusLabels[status] ?? status, style: const TextStyle(color: Colors.white, fontSize: 12)),
-                  backgroundColor: color,
+                Text(label, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                const SizedBox(height: 4),
+                Text(
+                  value,
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF0F172A), height: 1.4),
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            Text('Karyawan: ${leave['user_name'] ?? '-'}', style: TextStyle(color: Colors.grey.shade700)),
-            Text('Email: ${leave['user_email'] ?? '-'}', style: TextStyle(color: Colors.grey.shade700)),
-            Text('Tipe: ${leave['type'] ?? '-'}', style: TextStyle(color: Colors.grey.shade700)),
-            const Divider(height: 24),
-            Text('Deskripsi:', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.grey.shade800)),
-            const SizedBox(height: 4),
-            Text(leave['description'] ?? '-'),
-            if (leave['admin_note'] != null && (leave['admin_note'] as String).isNotEmpty) ...[
-              const Divider(height: 24),
-              Text('Catatan Admin:', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.grey.shade800)),
-              const SizedBox(height: 4),
-              Text(leave['admin_note']),
-            ],
-            if (status == 'PENDING') ...[
-              const SizedBox(height: 24),
-              Row(
-                children: [
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: () { Navigator.pop(ctx); _processLeave(leave['id'], 'approve'); },
-                      icon: const Icon(Icons.check_circle),
-                      label: const Text('Setujui'),
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () { Navigator.pop(ctx); _processLeave(leave['id'], 'reject'); },
-                      icon: const Icon(Icons.cancel, color: Colors.red),
-                      label: const Text('Tolak', style: TextStyle(color: Colors.red)),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

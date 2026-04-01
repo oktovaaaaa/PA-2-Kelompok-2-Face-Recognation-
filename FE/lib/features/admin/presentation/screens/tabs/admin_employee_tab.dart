@@ -124,44 +124,82 @@ class _AdminEmployeeTabState extends State<AdminEmployeeTab> with SingleTickerPr
   }
 
   void _showAssignPosition(Map<String, dynamic> emp) {
-    String? selectedPositionId = emp['position_id'];
+    String? selectedPositionId = emp['position_id'] ?? '';
+    
     showModalBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setModalState) => Padding(
-          padding: const EdgeInsets.all(20),
+        builder: (ctx, setModalState) => Container(
+          padding: const EdgeInsets.all(24),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.only(topLeft: Radius.circular(32), topRight: Radius.circular(32)),
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Set Jabatan - ${emp['name']}',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-                value: selectedPositionId,
-                decoration: InputDecoration(
-                  labelText: 'Pilih Jabatan',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-                items: [
-                  const DropdownMenuItem(value: '', child: Text('— Tidak ada jabatan —')),
-                  ..._positions.map((p) => DropdownMenuItem(
-                        value: p['id'] as String,
-                        child: Text('${p['name']} (${_formatSalary(p['salary'])})'),
-                      )),
+              Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)))),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  const Icon(Icons.badge_rounded, color: Color(0xFF2563EB)),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Set Jabatan Karyawan', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                        Text(emp['name'] ?? '', style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+                      ],
+                    ),
+                  ),
                 ],
-                onChanged: (v) => setModalState(() => selectedPositionId = v),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 24),
+              const Text('Pilih salah satu jabatan di bawah ini:', style: TextStyle(fontSize: 13, color: Colors.grey, fontWeight: FontWeight.w500)),
+              const SizedBox(height: 12),
+              
+              Flexible(
+                child: ListView(
+                  shrinkWrap: true,
+                  children: [
+                    // Opsi Kosongkan Jabatan
+                    _buildPositionOption(
+                      id: '',
+                      name: 'Tidak ada jabatan',
+                      salary: 0,
+                      selectedId: selectedPositionId ?? '',
+                      onTap: (id) => setModalState(() => selectedPositionId = id),
+                    ),
+                    const SizedBox(height: 8),
+                    // Daftar Jabatan dari Data
+                    ..._positions.map((p) => Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: _buildPositionOption(
+                        id: p['id'] as String,
+                        name: p['name'] as String,
+                        salary: p['salary'],
+                        selectedId: selectedPositionId ?? '',
+                        onTap: (id) => setModalState(() => selectedPositionId = id),
+                      ),
+                    )),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF4D64F5),
+                    backgroundColor: const Color(0xFF2563EB),
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    elevation: 0,
                   ),
                   onPressed: () async {
                     Navigator.pop(ctx);
@@ -170,18 +208,73 @@ class _AdminEmployeeTabState extends State<AdminEmployeeTab> with SingleTickerPr
                           {'user_id': emp['id'], 'position_id': selectedPositionId ?? ''});
                       if (!mounted) return;
                       if (res.success) {
-                        AppDialog.showSuccess(context, 'Jabatan berhasil diset');
+                        AppDialog.showSuccess(context, 'Jabatan berhasil diset untuk ${emp['name']}');
                         _loadData();
                       } else {
-                        AppDialog.showError(context, res.message ?? 'Gagal menset jabatan');
+                        AppDialog.showError(context, res.message ?? 'Gagal menetapkan jabatan');
                       }
                     } catch (_) {}
                   },
-                  child: const Text('Simpan Jabatan'),
+                  child: const Text('Simpan Perubahan Jabatan', style: TextStyle(fontWeight: FontWeight.bold)),
                 ),
               ),
+              const SizedBox(height: 16),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPositionOption({
+    required String id,
+    required String name,
+    required dynamic salary,
+    required String selectedId,
+    required Function(String) onTap,
+  }) {
+    final isSelected = id == selectedId;
+    return InkWell(
+      onTap: () => onTap(id),
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF2563EB).withOpacity(0.05) : const Color(0xFFF8FAFC),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isSelected ? const Color(0xFF2563EB) : Colors.grey.shade200,
+            width: isSelected ? 2 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: isSelected ? const Color(0xFF2563EB) : Colors.grey.shade200,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                id.isEmpty ? Icons.block_rounded : Icons.work_outline_rounded,
+                size: 18,
+                color: isSelected ? Colors.white : Colors.grey.shade600,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(name, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: isSelected ? const Color(0xFF2563EB) : const Color(0xFF0F172A))),
+                  if (salary > 0)
+                    Text(_formatSalary(salary), style: TextStyle(color: isSelected ? const Color(0xFF2563EB).withOpacity(0.7) : Colors.grey.shade600, fontSize: 12)),
+                ],
+              ),
+            ),
+            if (isSelected)
+              const Icon(Icons.check_circle_rounded, color: Color(0xFF2563EB), size: 24),
+          ],
         ),
       ),
     );

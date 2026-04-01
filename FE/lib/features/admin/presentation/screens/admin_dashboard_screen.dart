@@ -6,7 +6,7 @@ import '../../../auth/presentation/screens/landing_screen.dart';
 import '../../../common/widgets/premium_bottom_nav.dart';
 import 'tabs/admin_home_tab.dart';
 import 'tabs/admin_leave_tab.dart';
-import 'tabs/admin_position_tab.dart';
+import 'admin_payroll_screen.dart';
 import 'tabs/admin_employee_tab.dart';
 import 'tabs/admin_profile_tab.dart';
 
@@ -27,7 +27,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     _tabs = [
       AdminHomeTab(onNavigate: (i) => setState(() => _currentIndex = i)),
       const AdminLeaveTab(),
-      const AdminPositionTab(),
+      const AdminPayrollScreen(isTab: true),
       const AdminEmployeeTab(),
       const AdminProfileTab(),
     ];
@@ -93,7 +93,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         items: [
           BottomNavItem(icon: Icons.home_rounded, label: 'Beranda'),
           BottomNavItem(icon: Icons.assignment_rounded, label: 'Perizinan'),
-          BottomNavItem(icon: Icons.work_rounded, label: 'Jabatan'),
+          BottomNavItem(icon: Icons.payments_rounded, label: 'Gaji'),
           BottomNavItem(icon: Icons.people_rounded, label: 'Karyawan'),
           BottomNavItem(icon: Icons.person_rounded, label: 'Profil'),
         ],

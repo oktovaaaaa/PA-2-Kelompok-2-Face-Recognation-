@@ -35,6 +35,9 @@ type User struct {
 
 	DeviceID string `json:"device_id"`
 
+	BankName          string `json:"bank_name"`
+	BankAccountNumber string `json:"bank_account_number"`
+
 	// For PIN lockout system
 	InvalidPinAttempts int        `json:"invalid_pin_attempts"`
 	PinLockedUntil     *time.Time `json:"pin_locked_until"`

@@ -1,6 +1,33 @@
 import 'package:flutter/material.dart';
 
 class AppDialog {
+  static void showLoading(BuildContext context, {String message = 'Memuat...'}) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => WillPopScope(
+        onWillPop: () async => false,
+        child: AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 16),
+              const CircularProgressIndicator(color: Color(0xFF2563EB)),
+              const SizedBox(height: 24),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   static Future<bool?> showError(BuildContext context, String message, {String confirmText = 'Oke, Mengerti'}) {
     return _show(
       context,

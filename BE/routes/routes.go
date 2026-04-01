@@ -100,6 +100,10 @@ func SetupRouter() *gin.Engine {
 		// Pengaturan absensi
 		admin.GET("/attendance-settings", handlers.GetAttendanceSettings)
 		admin.PUT("/attendance-settings", handlers.UpdateAttendanceSettings)
+
+		// Penggajian (Payroll)
+		admin.GET("/payroll", handlers.AdminGetSalaries)
+		admin.POST("/payroll/:id/pay", handlers.AdminPaySalary)
 	}
 
 	// Protected Employee Routes
@@ -117,6 +121,10 @@ func SetupRouter() *gin.Engine {
 		employee.GET("/leaves", handlers.EmployeeGetLeaves)
 		employee.PUT("/leaves/:id", handlers.EmployeeUpdateLeave)
 		employee.DELETE("/leaves/:id", handlers.EmployeeDeleteLeave)
+
+		// Penggajian (Payroll)
+		employee.GET("/salaries", handlers.GetMySalaries)
+		employee.PUT("/bank-info", handlers.UpdateBankInfo)
 	}
 
 	return r

@@ -25,7 +25,11 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
   // New Analytics State
   DateTimeRange? _selectedDateRange;
   bool _isLineChart = false;
+  bool _showStats = true;
+  bool _showFilters = true; // State baru untuk buka tutup filter
   String _periodFilter = 'month'; // 'week', 'month', 'year', 'custom'
+  int _selectedMonth = DateTime.now().month;
+  int _selectedYear = DateTime.now().year;
 
   @override
   void initState() {
@@ -37,53 +41,26 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
     setState(() => _loading = true);
     try {
       String attendanceUrl = '/api/admin/attendance?filter=$_periodFilter';
-      if (_periodFilter == 'custom' && _selectedDateRange != null) {
+      
+      if (_periodFilter == 'month') {
+        attendanceUrl += '&month=$_selectedMonth&year=$_selectedYear';
+      } else if (_periodFilter == 'year') {
+        attendanceUrl += '&year=$_selectedYear';
+      } else if (_periodFilter == 'custom' && _selectedDateRange != null) {
         final start = DateFormat('yyyy-MM-dd').format(_selectedDateRange!.start);
         final end = DateFormat('yyyy-MM-dd').format(_selectedDateRange!.end);
         attendanceUrl = '/api/admin/attendance?start_date=$start&end_date=$end';
       }
 
-      final results = await Future.wait([
-        ApiClient.get(attendanceUrl),
-        ApiClient.get('/api/admin/leaves?status=APPROVED'),
-      ]);
+      final res = await ApiClient.get(attendanceUrl);
 
-      final attendanceRes = results[0];
-      final leavesRes = results[1];
-
-      List<dynamic> combined = [];
-
-      if (attendanceRes.success) {
-        final List<dynamic> attData = attendanceRes.data ?? [];
-        for (var item in attData) {
-          combined.add(Map<String, dynamic>.from(item));
-        }
-      }
-
-      if (leavesRes.success) {
-        final List<dynamic> leavesData = leavesRes.data ?? [];
-        // Normalize leave data to match attendance record format
-        for (var leaf in leavesData) {
-          final normalized = Map<String, dynamic>.from(leaf);
-          combined.add({
-            ...normalized,
-            'date': (normalized['created_at'] ?? '').toString().substring(0, 10),
-            'status': normalized['type'] ?? 'LEAVE',
-            'is_leave': true,
-          });
-        }
-      }
-
-      if (mounted) {
+      if (res.success && mounted) {
         setState(() {
-          _allRecords = combined;
-          // Sort by date descending
-          _allRecords.sort((a, b) => (b['date'] ?? '').compareTo(a['date'] ?? ''));
+          _allRecords = res.data ?? [];
           _applyFilters();
         });
       }
     } catch (_) {
-      // Handle error if needed
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -111,30 +88,264 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
     });
   }
 
+  Future<void> _showDownloadDialog() {
+    return showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(24),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.only(topLeft: Radius.circular(32), topRight: Radius.circular(32)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)))),
+            const SizedBox(height: 24),
+            const Text('Unduh Laporan Excel', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
+            const Text('Pilih periode laporan yang ingin Anda unduh', style: TextStyle(color: Color(0xFF64748B), fontSize: 13)),
+            const SizedBox(height: 24),
+            _buildDownloadOption(
+              icon: Icons.calendar_month_rounded,
+              title: 'Laporan Bulanan',
+              desc: 'Unduh laporan per bulan tertentu',
+              onTap: () {
+                Navigator.pop(context);
+                _showDownloadFilterSelector('month');
+              },
+            ),
+            const SizedBox(height: 12),
+            _buildDownloadOption(
+              icon: Icons.view_agenda_rounded,
+              title: 'Laporan Tahunan',
+              desc: 'Unduh laporan satu tahun penuh',
+              onTap: () {
+                Navigator.pop(context);
+                _showDownloadFilterSelector('year');
+              },
+            ),
+            const SizedBox(height: 12),
+            _buildDownloadOption(
+              icon: Icons.date_range_rounded,
+              title: 'Rentang Tanggal',
+              desc: 'Unduh laporan berdasarkan rentang dari-sampai',
+              onTap: () {
+                Navigator.pop(context);
+                _showDownloadFilterSelector('custom');
+              },
+            ),
+            const SizedBox(height: 32),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDownloadOption({required IconData icon, required String title, required String desc, required VoidCallback onTap}) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF8FAFC),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.grey.shade100),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(color: const Color(0xFF2563EB).withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
+              child: Icon(icon, color: const Color(0xFF2563EB), size: 22),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  Text(desc, style: TextStyle(color: Colors.grey.shade500, fontSize: 11)),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded, color: Colors.grey),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showDownloadFilterSelector(String type) async {
+    int dlMonth = _selectedMonth;
+    int dlYear = _selectedYear;
+    DateTimeRange? dlRange = _selectedDateRange;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: Text(
+          type == 'month' ? 'Pilih Bulan & Tahun' : type == 'year' ? 'Pilih Tahun' : 'Pilih Rentang',
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        ),
+        content: StatefulBuilder(
+          builder: (context, setDialogState) => Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (type == 'month') ...[
+                DropdownButton<int>(
+                  value: dlMonth,
+                  isExpanded: true,
+                  items: List.generate(12, (i) => DropdownMenuItem(value: i + 1, child: Text(DateFormat('MMMM').format(DateTime(2000, i + 1))))),
+                  onChanged: (v) => setDialogState(() => dlMonth = v!),
+                ),
+                const SizedBox(height: 12),
+              ],
+              if (type == 'month' || type == 'year')
+                DropdownButton<int>(
+                  value: dlYear,
+                  isExpanded: true,
+                  items: List.generate(5, (i) => DropdownMenuItem(value: DateTime.now().year - 2 + i, child: Text('${DateTime.now().year - 2 + i}'))),
+                  onChanged: (v) => setDialogState(() => dlYear = v!),
+                ),
+              if (type == 'custom')
+                ElevatedButton.icon(
+                  onPressed: () async {
+                    final picked = await showDateRangePicker(
+                      context: context,
+                      firstDate: DateTime(2023),
+                      lastDate: DateTime.now().add(const Duration(days: 365)),
+                    );
+                    if (picked != null) setDialogState(() => dlRange = picked);
+                  },
+                  icon: const Icon(Icons.date_range),
+                  label: Text(dlRange == null ? 'Pilih Rentang' : '${DateFormat('dd/MM/yyyy').format(dlRange!.start)} - ${DateFormat('dd/MM/yyyy').format(dlRange!.end)}'),
+                ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Batal', style: TextStyle(color: Colors.grey))),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _handleDownloadProcess(type, month: dlMonth, year: dlYear, range: dlRange);
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2563EB), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+            child: const Text('Unduh Sekarang', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _handleDownloadProcess(String filterType, {int? month, int? year, DateTimeRange? range}) async {
+    // Show Loading
+    AppDialog.showLoading(context, message: 'Menyiapkan laporan...');
+    
+    try {
+      String url = '/api/admin/attendance?filter=$filterType';
+      String periodLabel = '';
+
+      if (filterType == 'month') {
+        url += '&month=$month&year=$year';
+        periodLabel = '${DateFormat('MMMM').format(DateTime(2000, month!))} $year';
+      } else if (filterType == 'year') {
+        url += '&year=$year';
+        periodLabel = 'Tahun $year';
+      } else if (filterType == 'custom' && range != null) {
+        final start = DateFormat('yyyy-MM-dd').format(range.start);
+        final end = DateFormat('yyyy-MM-dd').format(range.end);
+        url = '/api/admin/attendance?start_date=$start&end_date=$end';
+        periodLabel = '${DateFormat('dd/MM/yyyy').format(range.start)} - ${DateFormat('dd/MM/yyyy').format(range.end)}';
+      }
+
+      final res = await ApiClient.get(url);
+      Navigator.pop(context); // Hide Loading
+
+      if (res.success && res.data != null) {
+        final List<dynamic> records = res.data;
+        
+        // Calculate stats
+        Map<String, int> stats = {'PRESENT': 0, 'LATE': 0, 'ABSENT': 0, 'WORKING': 0, 'NOT_YET': 0, 'EARLY_LEAVE': 0};
+        for (var r in records) {
+          final s = (r['status'] ?? '').toString().toUpperCase();
+          if (stats.containsKey(s)) stats[s] = (stats[s] ?? 0) + 1;
+        }
+
+        final fileName = 'Laporan_Kehadiran_${periodLabel.replaceAll(' ', '_')}_${DateTime.now().millisecondsSinceEpoch}';
+        final path = await ExcelExportService.exportAttendance(records, fileName, stats: stats, periodLabel: periodLabel);
+        
+        if (mounted) {
+          AppDialog.showSuccess(
+            context, 
+            'Laporan berhasil dibuat',
+            confirmText: 'Buka File',
+          ).then((confirmed) {
+             if (confirmed == true) OpenFilex.open(path);
+          });
+        }
+      } else {
+        AppDialog.showError(context, 'Gagal mengambil data laporan');
+      }
+    } catch (e) {
+      Navigator.pop(context); // Hide Loading
+      AppDialog.showError(context, 'Terjadi kesalahan: $e');
+    }
+  }
+
   Future<void> _exportExcel() async {
     if (_filteredRecords.isEmpty) {
       AppDialog.showInfo(context, 'Tidak ada data untuk diekspor');
       return;
     }
+    
+    // Hitung statistik untuk Excel dari _filteredRecords
+    Map<String, int> stats = {
+      'PRESENT': 0, 'LATE': 0, 'ABSENT': 0, 'WORKING': 0, 'NOT_YET': 0, 'EARLY_LEAVE': 0,
+    };
+    for (var r in _filteredRecords) {
+      final s = (r['status'] ?? '').toString().toUpperCase();
+      if (stats.containsKey(s)) {
+        stats[s] = (stats[s] ?? 0) + 1;
+      }
+    }
+
+    String periodLabel = '';
+    if (_periodFilter == 'month') {
+      periodLabel = '${DateFormat('MMMM').format(DateTime(2000, _selectedMonth))} $_selectedYear';
+    } else if (_periodFilter == 'year') {
+      periodLabel = 'Tahun $_selectedYear';
+    } else if (_periodFilter == 'custom' && _selectedDateRange != null) {
+      periodLabel = '${DateFormat('dd/MM/yyyy').format(_selectedDateRange!.start)} - ${DateFormat('dd/MM/yyyy').format(_selectedDateRange!.end)}';
+    } else {
+      periodLabel = _periodFilter;
+    }
+
     try {
-      final path = await ExcelExportService.exportAttendance(_filteredRecords, 'Laporan_Kehadiran_${DateTime.now().millisecondsSinceEpoch}');
+      final fileName = 'Laporan_Kehadiran_${periodLabel.replaceAll(' ', '_')}_${DateTime.now().millisecondsSinceEpoch}';
+      final path = await ExcelExportService.exportAttendance(
+        _filteredRecords, 
+        fileName,
+        stats: stats,
+        periodLabel: periodLabel,
+      );
+      
       if (mounted) {
-        String msg = 'Laporan berhasil dibuat';
-        if (path.contains('Download')) {
-          msg = 'Tersimpan di folder Download';
-        }
         AppDialog.showSuccess(
           context, 
-          msg,
+          'Laporan berhasil dibuat\nLokasi: $path',
           confirmText: 'Buka File',
         ).then((confirmed) {
            if (confirmed == true) OpenFilex.open(path);
         });
       }
     } catch (e) {
-      if (mounted) {
-        AppDialog.showError(context, 'Gagal ekspor: $e');
-      }
+      if (mounted) AppDialog.showError(context, 'Gagal ekspor: $e');
     }
   }
 
@@ -170,16 +381,25 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
                         onPressed: () => Navigator.pop(context),
                         icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 20),
                       ),
-                      const Expanded(
-                        child: Text(
-                          'Laporan & Statistik',
-                          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
+                      const SizedBox(width: 8),
+                      const Text(
+                        'Laporan & Statistik',
+                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
+                      ),
+                      const Spacer(),
+                      // Toggle Statistik
+                      IconButton(
+                        onPressed: () => setState(() => _showStats = !_showStats),
+                        icon: Icon(
+                          _showStats ? Icons.bar_chart_rounded : Icons.visibility_rounded,
+                          color: Colors.white.withOpacity(0.9),
                         ),
+                        tooltip: _showStats ? 'Sembunyikan Statistik' : 'Tampilkan Statistik',
                       ),
                       IconButton(
-                        onPressed: _exportExcel,
+                        onPressed: _showDownloadDialog,
                         icon: const Icon(Icons.download_rounded, color: Colors.white),
-                        tooltip: 'Export Excel',
+                        tooltip: 'Unduh Excel',
                       ),
                     ],
                   ),
@@ -193,7 +413,7 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
             // Filters & Date Range Selection
             Container(
               margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(24),
@@ -202,70 +422,94 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(color: const Color(0xFF2563EB).withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
-                        child: const Icon(Icons.tune_rounded, color: Color(0xFF2563EB), size: 20),
-                      ),
-                      const SizedBox(width: 12),
-                      const Text('Filter Laporan', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF0F172A))),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  TextField(
-                    onChanged: (v) {
-                      _searchQuery = v;
-                      _applyFilters();
-                    },
-                    decoration: InputDecoration(
-                      hintText: 'Cari nama karyawan...',
-                      prefixIcon: const Icon(Icons.search_rounded),
-                      filled: true,
-                      fillColor: const Color(0xFFF8FAFC),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-                      contentPadding: const EdgeInsets.symmetric(vertical: 0),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
+                  InkWell(
+                    onTap: () => setState(() => _showFilters = !_showFilters),
                     child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        _periodChip('week', 'Minggu Ini'),
-                        _periodChip('month', 'Bulan Ini'),
-                        _periodChip('year', 'Tahun Ini'),
-                        _periodChip('custom', 'Pilih Tanggal'),
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(color: const Color(0xFF2563EB).withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
+                              child: const Icon(Icons.tune_rounded, color: Color(0xFF2563EB), size: 18),
+                            ),
+                            const SizedBox(width: 12),
+                            const Text('Filter Laporan', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF0F172A))),
+                          ],
+                        ),
+                        Icon(_showFilters ? Icons.expand_less_rounded : Icons.expand_more_rounded, color: Colors.grey),
                       ],
                     ),
                   ),
                   
-                  if (_periodFilter == 'custom') ...[
+                  if (_showFilters) ...[
                     const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(child: _buildDateInput('Mulai', true)),
-                        const SizedBox(width: 12),
-                        Expanded(child: _buildDateInput('Selesai', false)),
-                      ],
+                    TextField(
+                      onChanged: (v) {
+                        _searchQuery = v;
+                        _applyFilters();
+                      },
+                      decoration: InputDecoration(
+                        hintText: 'Cari nama karyawan...',
+                        prefixIcon: const Icon(Icons.search_rounded),
+                        filled: true,
+                        fillColor: const Color(0xFFF8FAFC),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                        contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          _periodChip('week', 'Minggu Ini'),
+                          _periodChip('month', 'Pilih Bulan'),
+                          _periodChip('year', 'Pilih Tahun'),
+                          _periodChip('custom', 'Pilih Rentang'),
+                        ],
+                      ),
+                    ),
+                    
+                    if (_periodFilter == 'month' || _periodFilter == 'year') ...[
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          if (_periodFilter == 'month')
+                            Expanded(child: _buildMonthDropdown()),
+                          if (_periodFilter == 'month') const SizedBox(width: 12),
+                          Expanded(child: _buildYearDropdown()),
+                        ],
+                      ),
+                    ],
+
+                    if (_periodFilter == 'custom') ...[
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(child: _buildDateInput('Mulai', true)),
+                          const SizedBox(width: 12),
+                          Expanded(child: _buildDateInput('Selesai', false)),
+                        ],
+                      ),
+                    ],
+                    const SizedBox(height: 12),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          _filterChip('ALL', 'Semua'),
+                          _filterChip('PRESENT', 'Hadir'),
+                          _filterChip('LATE', 'Telat'),
+                          _filterChip('ABSENT', 'Alpha'),
+                          _filterChip('IZIN', 'Izin'),
+                          _filterChip('SAKIT', 'Sakit'),
+                        ],
+                      ),
                     ),
                   ],
-                  const SizedBox(height: 16),
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: [
-                        _filterChip('ALL', 'Semua'),
-                        _filterChip('PRESENT', 'Hadir'),
-                        _filterChip('LATE', 'Terlambat'),
-                        _filterChip('ABSENT', 'Alpha'),
-                        _filterChip('IZIN', 'Izin'),
-                        _filterChip('SAKIT', 'Sakit'),
-                      ],
-                    ),
-                  ),
                 ],
               ),
             ),
@@ -346,6 +590,165 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
     );
   }
 
+  Widget _buildMonthDropdown() {
+    return _buildPickerTrigger(
+      title: DateFormat('MMMM').format(DateTime(2000, _selectedMonth)),
+      icon: Icons.calendar_month_rounded,
+      onTap: () => _showMonthPickerSheet(
+        current: _selectedMonth,
+        onChanged: (v) {
+          setState(() => _selectedMonth = v);
+          _loadData();
+        },
+      ),
+    );
+  }
+
+  Widget _buildYearDropdown() {
+    return _buildPickerTrigger(
+      title: '$_selectedYear',
+      icon: Icons.event_available_rounded,
+      onTap: () => _showYearPickerSheet(
+        current: _selectedYear,
+        onChanged: (v) {
+          setState(() => _selectedYear = v);
+          _loadData();
+        },
+      ),
+    );
+  }
+
+  Widget _buildPickerTrigger({required String title, required IconData icon, required VoidCallback onTap}) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF8FAFC),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey.shade200),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 16, color: const Color(0xFF2563EB)),
+            const SizedBox(width: 8),
+            Expanded(child: Text(title, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)))),
+            const Icon(Icons.keyboard_arrow_down_rounded, size: 16, color: Colors.grey),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showMonthPickerSheet({required int current, required Function(int) onChanged}) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(24),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.only(topLeft: Radius.circular(32), topRight: Radius.circular(32)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2))),
+            const SizedBox(height: 20),
+            const Text('Pilih Bulan', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 24),
+            GridView.builder(
+              shrinkWrap: true,
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 3,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                childAspectRatio: 2,
+              ),
+              itemCount: 12,
+              itemBuilder: (context, index) {
+                final month = index + 1;
+                final isSelected = current == month;
+                return InkWell(
+                  onTap: () {
+                    onChanged(month);
+                    Navigator.pop(context);
+                  },
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: isSelected ? const Color(0xFF2563EB) : const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      DateFormat('MMM').format(DateTime(2000, month)),
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: isSelected ? Colors.white : const Color(0xFF0F172A),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 24),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showYearPickerSheet({required int current, required Function(int) onChanged}) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(24),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.only(topLeft: Radius.circular(32), topRight: Radius.circular(32)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2))),
+            const SizedBox(height: 20),
+            const Text('Pilih Tahun', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 16),
+            SizedBox(
+              height: 250,
+              child: ListView.builder(
+                itemCount: 5,
+                itemBuilder: (context, index) {
+                  final year = DateTime.now().year - 2 + index;
+                  final isSelected = current == year;
+                  return ListTile(
+                    onTap: () {
+                      onChanged(year);
+                      Navigator.pop(context);
+                    },
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    tileColor: isSelected ? const Color(0xFF2563EB).withOpacity(0.1) : null,
+                    leading: Icon(Icons.calendar_today_rounded, size: 18, color: isSelected ? const Color(0xFF2563EB) : Colors.grey),
+                    title: Text(
+                      '$year',
+                      style: TextStyle(
+                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                        color: isSelected ? const Color(0xFF2563EB) : const Color(0xFF0F172A),
+                      ),
+                    ),
+                    trailing: isSelected ? const Icon(Icons.check_circle_rounded, color: Color(0xFF2563EB)) : null,
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildDateInput(String label, bool isStart) {
     final date = isStart ? _selectedDateRange?.start : _selectedDateRange?.end;
     final dateStr = date != null ? DateFormat('dd/MM/yyyy').format(date) : '-';
@@ -382,9 +785,9 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
     final initial = (isStart ? _selectedDateRange?.start : _selectedDateRange?.end) ?? DateTime.now();
     final picked = await showDatePicker(
       context: context,
-      initialDate: initial,
+      initialDate: initial.isAfter(DateTime.now()) ? DateTime.now() : initial,
       firstDate: DateTime(2023),
-      lastDate: DateTime.now(),
+      lastDate: DateTime.now().add(const Duration(days: 365)), // Membolehkan pemilihan ke depan untuk laporan rencana/target jika diperlukan, atau batasi sesuai kebutuhan
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
@@ -407,21 +810,26 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
   }
 
   Widget _buildAnalyticsSection() {
+    if (!_showStats) return const SizedBox.shrink();
+
     // Agreggate data for charts
     Map<String, Map<String, int>> dailyStats = {};
-    int present = 0, late = 0, absent = 0, other = 0;
+    int present = 0, late = 0, absent = 0, working = 0, notYet = 0, earlyLeave = 0, other = 0;
 
     for (var r in _filteredRecords) {
       final date = (r['date'] ?? '').toString();
       final status = (r['status'] ?? '').toString().toUpperCase();
       
       if (!dailyStats.containsKey(date)) {
-        dailyStats[date] = {'PRESENT': 0, 'LATE': 0, 'ABSENT': 0, 'OTHER': 0};
+        dailyStats[date] = {'PRESENT': 0, 'LATE': 0, 'ABSENT': 0, 'WORKING': 0, 'NOT_YET': 0, 'EARLY_LEAVE': 0, 'OTHER': 0};
       }
 
       if (status == 'PRESENT') { present++; dailyStats[date]!['PRESENT'] = (dailyStats[date]!['PRESENT'] ?? 0) + 1; }
       else if (status == 'LATE') { late++; dailyStats[date]!['LATE'] = (dailyStats[date]!['LATE'] ?? 0) + 1; }
       else if (status == 'ABSENT') { absent++; dailyStats[date]!['ABSENT'] = (dailyStats[date]!['ABSENT'] ?? 0) + 1; }
+      else if (status == 'WORKING') { working++; dailyStats[date]!['WORKING'] = (dailyStats[date]!['WORKING'] ?? 0) + 1; }
+      else if (status == 'NOT_YET') { notYet++; dailyStats[date]!['NOT_YET'] = (dailyStats[date]!['NOT_YET'] ?? 0) + 1; }
+      else if (status == 'EARLY_LEAVE') { earlyLeave++; dailyStats[date]!['EARLY_LEAVE'] = (dailyStats[date]!['EARLY_LEAVE'] ?? 0) + 1; }
       else { other++; dailyStats[date]!['OTHER'] = (dailyStats[date]!['OTHER'] ?? 0) + 1; }
     }
 
@@ -430,12 +838,12 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
     final displayDates = sortedDates.length > 7 ? sortedDates.sublist(sortedDates.length - 7) : sortedDates;
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-      padding: const EdgeInsets.all(20),
+      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 15, offset: const Offset(0, 5))],
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -443,36 +851,40 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Statistik Kehadiran', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              const Text('Tren Kehadiran (7 Hari)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
               Row(
                 children: [
                   IconButton(
                     onPressed: () => setState(() => _isLineChart = false),
-                    icon: Icon(Icons.bar_chart_rounded, color: !_isLineChart ? const Color(0xFF2563EB) : Colors.grey.shade300),
+                    icon: Icon(Icons.bar_chart_rounded, size: 18, color: !_isLineChart ? const Color(0xFF2563EB) : Colors.grey.shade300),
                   ),
                   IconButton(
                     onPressed: () => setState(() => _isLineChart = true),
-                    icon: Icon(Icons.show_chart_rounded, color: _isLineChart ? const Color(0xFF2563EB) : Colors.grey.shade300),
+                    icon: Icon(Icons.show_chart_rounded, size: 18, color: _isLineChart ? const Color(0xFF2563EB) : Colors.grey.shade300),
                   ),
                 ],
               ),
             ],
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 8),
           SizedBox(
-            height: 180,
+            height: 110,
             child: _isLineChart 
               ? _buildLineChart(displayDates, dailyStats)
               : _buildBarChart(displayDates, dailyStats),
           ),
-          const SizedBox(height: 20),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            alignment: WrapAlignment.center,
             children: [
-              _legendItem(Colors.green, 'Hadir'),
-              _legendItem(Colors.orange, 'Telat'),
-              _legendItem(Colors.red, 'Alpha'),
-              _legendItem(Colors.blue, 'Izin'),
+              _legendItem(Colors.green, 'Hadir', size: 10),
+              _legendItem(Colors.orange, 'Telat', size: 10),
+              _legendItem(const Color(0xFF818CF8), 'Aktif', size: 10),
+              _legendItem(Colors.red, 'Alpha', size: 10),
+              _legendItem(Colors.grey.shade400, 'Mangkir', size: 10),
+              _legendItem(Colors.deepPurple, 'Lupa Pulang', size: 10),
             ],
           ),
         ],
@@ -566,12 +978,13 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
     );
   }
 
-  Widget _legendItem(Color color, String label) {
+  Widget _legendItem(Color color, String label, {double? size}) {
     return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
         Container(width: 8, height: 8, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
         const SizedBox(width: 6),
-        Text(label, style: TextStyle(color: Colors.grey.shade700, fontSize: 11)),
+        Text(label, style: TextStyle(color: Colors.grey.shade700, fontSize: size ?? 11)),
       ],
     );
   }
@@ -582,9 +995,12 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
     String statusLabel;
     
     switch (status) {
-      case 'PRESENT': statusColor = Colors.green; statusLabel = 'Hadir'; break;
+      case 'PRESENT': statusColor = Colors.green; statusLabel = 'Hadir Tepat Waktu'; break;
       case 'LATE': statusColor = Colors.orange; statusLabel = 'Terlambat'; break;
       case 'ABSENT': statusColor = Colors.red; statusLabel = 'Alpha'; break;
+      case 'NOT_YET': statusColor = Colors.grey; statusLabel = 'Belum Hadir'; break;
+      case 'WORKING': statusColor = Color(0xFF818CF8); statusLabel = 'Sedang Bekerja'; break; // Indigo shade
+      case 'EARLY_LEAVE': statusColor = Colors.deepPurple; statusLabel = 'Pulang di Jam Kerja'; break;
       case 'LEAVE': 
       case 'IZIN': statusColor = Colors.blue; statusLabel = 'Izin'; break;
       case 'SICK': 

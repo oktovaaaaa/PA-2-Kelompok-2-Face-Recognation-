@@ -414,6 +414,18 @@ class _EmployeeProfileTabState extends State<EmployeeProfileTab> {
                     ],
                   ),
                   const SizedBox(height: 20),
+                  _buildDataCard(
+                    title: 'Informasi Gaji & Bank',
+                    icon: Icons.account_balance_rounded,
+                    color: const Color(0xFF10B981),
+                    onEdit: _editProfile,
+                    rows: [
+                      _infoRow('Gaji Pokok', 'Rp ${salary.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.')}'),
+                      _infoRow('Bank', _v('bank_name')),
+                      _infoRow('No. Rekening', _v('bank_account_number')),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
                   _buildSecurityCard(),
                   const SizedBox(height: 20),
                   Container(

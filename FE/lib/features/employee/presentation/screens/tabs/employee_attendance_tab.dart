@@ -296,13 +296,13 @@ class _EmployeeAttendanceTabState extends State<EmployeeAttendanceTab> {
                                   const SizedBox(height: 4),
                                   Text(
                                     () {
-                                      if (isDoneForDay) return 'SELESAI ✔️';
+                                      if (isDoneForDay) return 'HADIR TEPAT WAKTU ✔️';
                                       if (displayStatus == 'LATE') return 'TERLAMBAT ⚠️';
                                       if (displayStatus == 'ABSENT') return 'ALPHA ❌';
                                       if (displayStatus == 'NOT_STARTED') return 'BELUM MULAI';
-                                      if (displayStatus == 'EARLY_LEAVE') return 'PULANG JAM KERJA';
-                                      if (hasCheckedIn && !hasCheckedOut) return 'HADIR (AKTIF)';
-                                      return 'SIAP...';
+                                      if (displayStatus == 'EARLY_LEAVE') return 'PULANG DI JAM KERJA';
+                                      if (hasCheckedIn && !hasCheckedOut) return 'SEDANG BEKERJA';
+                                      return 'BELUM HADIR';
                                     }().toUpperCase(),
                                     style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 1),
                                   ),

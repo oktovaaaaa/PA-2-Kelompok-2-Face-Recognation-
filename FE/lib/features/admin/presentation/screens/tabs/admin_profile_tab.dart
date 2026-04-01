@@ -311,76 +311,139 @@ class _AdminProfileTabState extends State<AdminProfileTab> {
             ? CurrencyInputFormatter.formatNumber((_settings!['late_penalty'] as num).toInt())
             : '0');
 
+    List<Map<String, dynamic>> tiers = [];
+    if (_settings?['late_penalty_tiers'] != null) {
+      tiers = List<Map<String, dynamic>>.from(_settings!['late_penalty_tiers']);
+    }
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => Container(
-        decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-        padding: EdgeInsets.only(left: 24, right: 24, top: 24, bottom: MediaQuery.of(ctx).viewInsets.bottom + 24),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Jam Operasional', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: Color(0xFF0F172A))),
-              const SizedBox(height: 24),
-              const Text('Absensi Masuk', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey)),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(child: _buildField(checkInStartCtrl, 'Mulai', Icons.access_time_rounded)),
-                  const SizedBox(width: 16),
-                  Expanded(child: _buildField(checkInEndCtrl, 'Selesai', Icons.timer_off_outlined)),
-                ],
-              ),
-              const Text('Absensi Pulang', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey)),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(child: _buildField(checkOutStartCtrl, 'Mulai', Icons.access_time_rounded)),
-                  const SizedBox(width: 16),
-                  Expanded(child: _buildField(checkOutEndCtrl, 'Selesai', Icons.timer_off_outlined)),
-                ],
-              ),
-              _buildField(penaltyCtrl, 'Denda Alpha (Rp)', Icons.payments_outlined,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly, CurrencyInputFormatter()]),
-              _buildField(latePenaltyCtrl, 'Denda Terlambat (Rp)', Icons.warning_amber_rounded,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly, CurrencyInputFormatter()]),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF2563EB),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                  ),
-                  onPressed: () async {
-                    Navigator.pop(ctx);
-                    final res = await ApiClient.put('/api/admin/attendance-settings', {
-                      'check_in_start': checkInStartCtrl.text.trim(),
-                      'check_in_end': checkInEndCtrl.text.trim(),
-                      'check_out_start': checkOutStartCtrl.text.trim(),
-                      'check_out_end': checkOutEndCtrl.text.trim(),
-                      'alpha_penalty': CurrencyInputFormatter.unformat(penaltyCtrl.text.trim()).toDouble(),
-                      'late_penalty': CurrencyInputFormatter.unformat(latePenaltyCtrl.text.trim()).toDouble(),
-                    });
-                    if (!mounted) return;
-                    if (res.success) {
-                      AppDialog.showSuccess(context, 'Pengaturan Tersimpan');
-                    } else {
-                      AppDialog.showError(context, res.message ?? 'Gagal menyimpan pengaturan');
-                    }
-                    if (res.success) _load();
-                  },
-                  child: const Text('Simpan Pengaturan', style: TextStyle(fontWeight: FontWeight.bold)),
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setModalState) => Container(
+          decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+          padding: EdgeInsets.only(left: 24, right: 24, top: 24, bottom: MediaQuery.of(ctx).viewInsets.bottom + 24),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Jam Operasional', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: Color(0xFF0F172A))),
+                const SizedBox(height: 24),
+                const Text('Absensi Masuk', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey)),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(child: _buildField(checkInStartCtrl, 'Mulai', Icons.access_time_rounded)),
+                    const SizedBox(width: 16),
+                    Expanded(child: _buildField(checkInEndCtrl, 'Selesai', Icons.timer_off_outlined)),
+                  ],
                 ),
-              ),
-            ],
+                const Text('Absensi Pulang', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey)),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(child: _buildField(checkOutStartCtrl, 'Mulai', Icons.access_time_rounded)),
+                    const SizedBox(width: 16),
+                    Expanded(child: _buildField(checkOutEndCtrl, 'Selesai', Icons.timer_off_outlined)),
+                  ],
+                ),
+                _buildField(penaltyCtrl, 'Denda Alpha (Rp)', Icons.payments_outlined,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly, CurrencyInputFormatter()]),
+                _buildField(latePenaltyCtrl, 'Denda Terlambat Dasar (Rp)', Icons.warning_amber_rounded,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly, CurrencyInputFormatter()]),
+                
+                const Divider(),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Denda Berjenjang (Opsional)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF0F172A))),
+                    if (tiers.length < 5)
+                      TextButton.icon(
+                        icon: const Icon(Icons.add_circle_outline_rounded, size: 18),
+                        label: const Text('Tambah Tier', style: TextStyle(fontSize: 12)),
+                        onPressed: () => setModalState(() => tiers.add({'hours': 1, 'penalty': 10000.0})),
+                      ),
+                  ],
+                ),
+                const Text('Denda tambahan untuk keterlambatan yang makin lama', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                const SizedBox(height: 16),
+                
+                ...List.generate(tiers.length, (index) {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          flex: 2,
+                          child: _buildField(
+                            TextEditingController(text: tiers[index]['hours'].toString()),
+                            'Jam Ke-', Icons.timer_outlined,
+                            keyboardType: TextInputType.number,
+                            onChanged: (v) => tiers[index]['hours'] = int.tryParse(v) ?? 1,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          flex: 3,
+                          child: _buildField(
+                            TextEditingController(text: CurrencyInputFormatter.formatNumber((tiers[index]['penalty'] as num).toInt())),
+                            'Denda (Rp)', Icons.payments_rounded,
+                            keyboardType: TextInputType.number,
+                            inputFormatters: [FilteringTextInputFormatter.digitsOnly, CurrencyInputFormatter()],
+                            onChanged: (v) => tiers[index]['penalty'] = CurrencyInputFormatter.unformat(v).toDouble(),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline_rounded, color: Colors.red),
+                          onPressed: () => setModalState(() => tiers.removeAt(index)),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+
+                if (tiers.isEmpty)
+                  Center(child: Padding(padding: const EdgeInsets.only(bottom: 16), child: Text('Belum ada denda berjenjang', style: TextStyle(color: Colors.grey.shade400, fontSize: 12)))),
+
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF2563EB),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
+                    onPressed: () async {
+                      Navigator.pop(ctx);
+                      final res = await ApiClient.put('/api/admin/attendance-settings', {
+                        'check_in_start': checkInStartCtrl.text.trim(),
+                        'check_in_end': checkInEndCtrl.text.trim(),
+                        'check_out_start': checkOutStartCtrl.text.trim(),
+                        'check_out_end': checkOutEndCtrl.text.trim(),
+                        'alpha_penalty': CurrencyInputFormatter.unformat(penaltyCtrl.text.trim()).toDouble(),
+                        'late_penalty': CurrencyInputFormatter.unformat(latePenaltyCtrl.text.trim()).toDouble(),
+                        'late_penalty_tiers': tiers,
+                      });
+                      if (!mounted) return;
+                      if (res.success) {
+                        AppDialog.showSuccess(context, 'Pengaturan Tersimpan');
+                      } else {
+                        AppDialog.showError(context, res.message ?? 'Gagal menyimpan pengaturan');
+                      }
+                      if (res.success) _load();
+                    },
+                    child: const Text('Simpan Pengaturan', style: TextStyle(fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -388,7 +451,7 @@ class _AdminProfileTabState extends State<AdminProfileTab> {
   }
 
   Widget _buildField(TextEditingController ctrl, String label, IconData icon,
-      {TextInputType? keyboardType, int maxLines = 1, List<TextInputFormatter>? inputFormatters, bool readOnly = false, VoidCallback? onTap}) {
+      {TextInputType? keyboardType, int maxLines = 1, List<TextInputFormatter>? inputFormatters, bool readOnly = false, VoidCallback? onTap, Function(String)? onChanged}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -400,6 +463,7 @@ class _AdminProfileTabState extends State<AdminProfileTab> {
           maxLines: maxLines,
           readOnly: readOnly,
           onTap: onTap,
+          onChanged: onChanged,
           inputFormatters: inputFormatters,
           decoration: InputDecoration(
             prefixIcon: Icon(icon, color: const Color(0xFF64748B), size: 20),

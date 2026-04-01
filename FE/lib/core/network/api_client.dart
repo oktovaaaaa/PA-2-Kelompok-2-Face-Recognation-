@@ -127,4 +127,31 @@ class ApiClient {
       return ApiResponse(status: false, message: 'Gagal mengunggah file (Kode: ${response.statusCode})');
     }
   }
+
+  /// Multipart POST untuk endpoint khusus (misal: bayar gaji)
+  static Future<ApiResponse> postMultipart(String path, {Map<String, File>? files}) async {
+    final token = await SessionStorage.getToken();
+    final uri = _buildUri(path);
+    final request = http.MultipartRequest('POST', uri);
+
+    if (token != null && token.isNotEmpty) {
+      request.headers['Authorization'] = 'Bearer $token';
+    }
+
+    if (files != null) {
+      for (var entry in files.entries) {
+        request.files.add(await http.MultipartFile.fromPath(entry.key, entry.value.path));
+      }
+    }
+
+    final streamed = await request.send();
+    final response = await http.Response.fromStream(streamed);
+
+    try {
+      final decoded = jsonDecode(response.body);
+      return ApiResponse.fromJson(decoded);
+    } catch (_) {
+      return ApiResponse(status: false, message: 'Gagal mengirim data (Kode: ${response.statusCode})');
+    }
+  }
 }

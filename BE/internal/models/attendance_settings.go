@@ -17,9 +17,9 @@ type AttendanceSettings struct {
 	CheckOutStart string `json:"check_out_start"` // contoh: "16:00"
 	CheckOutEnd   string `json:"check_out_end"`   // contoh: "18:00"
 
-	AlphaPenalty float64 `json:"alpha_penalty"` // Potongan gaji per hari alpha (Rp)
-	LatePenalty  float64 `json:"late_penalty"`  // Potongan gaji per hari terlambat (Rp)
+	AlphaPenalty     float64 `json:"alpha_penalty"`      // Potongan gaji per hari alpha (Rp)
+	LatePenalty      float64 `json:"late_penalty"`       // Potongan gaji per hari terlambat (Rp) - Default
+	LatePenaltyTiers string  `json:"late_penalty_tiers"` // JSON array: [{"hours": 1, "penalty": 50000}, ...]
 
 	UpdatedAt time.Time `json:"updated_at"`
 }
-

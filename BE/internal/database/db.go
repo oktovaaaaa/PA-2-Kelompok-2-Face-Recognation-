@@ -44,6 +44,7 @@ func AutoMigrate() {
 		&models.Company{},
 		&models.Position{},
 		&models.User{},
+		&models.Salary{},
 		&models.InviteToken{},
 		&models.OTP{},
 		&models.Session{},
