@@ -11,6 +11,7 @@ import '../../../common/widgets/app_text_field.dart';
 import '../../../common/widgets/primary_button.dart';
 import '../../../common/widgets/wavy_background.dart';
 import '../../../auth/data/auth_repository.dart';
+import '../../../../core/services/notification_service.dart';
 import 'otp_login_screen.dart';
 import 'splash_gate.dart';
 import '../../../auth/presentation/screens/forgot_password_screen.dart';
@@ -154,6 +155,9 @@ class _LoginScreenState extends State<LoginScreen> {
       if (widget.pinOnlyMode) return; // In lockscreen, just unlock
 
       if (!mounted) return;
+
+      // Sync FCM token setelah login berhasil (PIN mode)
+      NotificationService.syncToken();
 
       Navigator.pushAndRemoveUntil(
         context,

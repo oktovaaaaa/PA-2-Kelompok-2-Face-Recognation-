@@ -21,32 +21,39 @@ func AdminGetLeaveRequests(c *gin.Context) {
 	adminUser := userCtx.(models.User)
 
 	status := c.Query("status")
+	month := c.Query("month")
+	year := c.Query("year")
+	search := c.Query("search")
 
-	var leaves []models.LeaveRequest
-	query := database.DB.Where("company_id = ? AND is_deleted_by_admin = ?", adminUser.CompanyID, false)
-	if status != "" {
-		query = query.Where("status = ?", status)
-	}
-	query.Order("created_at desc").Find(&leaves)
-
-	// Attach user info
 	type LeaveWithUser struct {
 		models.LeaveRequest
 		UserName  string `json:"user_name"`
 		UserEmail string `json:"user_email"`
 		UserPhoto string `json:"user_photo"`
 	}
+
 	var result []LeaveWithUser
-	for _, l := range leaves {
-		var user models.User
-		database.DB.Select("name, email, photo_url").Where("id = ?", l.UserID).First(&user)
-		result = append(result, LeaveWithUser{
-			LeaveRequest: l,
-			UserName:     user.Name,
-			UserEmail:    user.Email,
-			UserPhoto:    user.PhotoURL,
-		})
+	query := database.DB.Table("leave_requests").
+		Select("leave_requests.*, users.name as user_name, users.email as user_email, users.photo_url as user_photo").
+		Joins("left join users on users.id = leave_requests.user_id").
+		Where("leave_requests.company_id = ? AND leave_requests.is_deleted_by_admin = ?", adminUser.CompanyID, false)
+
+	if status != "" && status != "ALL" {
+		query = query.Where("leave_requests.status = ?", status)
 	}
+
+	if year != "" {
+		query = query.Where("EXTRACT(YEAR FROM leave_requests.created_at) = ?", year)
+	}
+	if month != "" && month != "0" {
+		query = query.Where("EXTRACT(MONTH FROM leave_requests.created_at) = ?", month)
+	}
+
+	if search != "" {
+		query = query.Where("users.name ILIKE ?", "%"+search+"%")
+	}
+
+	query.Order("leave_requests.created_at desc").Find(&result)
 
 	utils.Success(c, "Daftar izin karyawan", result)
 }
@@ -259,14 +266,51 @@ func EmployeeDeleteLeave(c *gin.Context) {
 	utils.Success(c, "Izin dihapus dari riwayat kamu", nil)
 }
 
-// EmployeeGetLeaves — list izin milik karyawan sendiri
+// EmployeeBulkDeleteLeaves — hapus beberapa izin sekaligus dari riwayat karyawan
+func EmployeeBulkDeleteLeaves(c *gin.Context) {
+	userCtx, _ := c.Get("user")
+	emp := userCtx.(models.User)
+
+	var body struct {
+		IDs []string `json:"ids"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil || len(body.IDs) == 0 {
+		utils.Error(c, "Daftar ID tidak valid")
+		return
+	}
+
+	// Soft-delete: Tandai is_deleted_by_employee = true
+	database.DB.Model(&models.LeaveRequest{}).
+		Where("user_id = ? AND id IN ?", emp.ID, body.IDs).
+		Update("is_deleted_by_employee", true)
+
+	// Hapus permanen yang sudah dihapus oleh kedua pihak
+	database.DB.Where("user_id = ? AND id IN ? AND is_deleted_by_admin = ?", emp.ID, body.IDs, true).
+		Delete(&models.LeaveRequest{})
+
+	utils.Success(c, "Beberapa izin berhasil dihapus dari riwayat", nil)
+}
+
+// EmployeeGetLeaves — list izin milik karyawan sendiri (dengan filter bulan/tahun)
 func EmployeeGetLeaves(c *gin.Context) {
 	userCtx, _ := c.Get("user")
 	emp := userCtx.(models.User)
 
+	month := c.Query("month")
+	year := c.Query("year")
+
 	var leaves []models.LeaveRequest
-	database.DB.Where("user_id = ? AND is_deleted_by_employee = ?", emp.ID, false).
-		Order("created_at desc").Find(&leaves)
+	query := database.DB.Where("user_id = ? AND is_deleted_by_employee = ?", emp.ID, false)
+
+	// Filter bulan & tahun menggunakan EXTRACT (Postgres)
+	if year != "" {
+		query = query.Where("EXTRACT(YEAR FROM created_at) = ?", year)
+	}
+	if month != "" {
+		query = query.Where("EXTRACT(MONTH FROM created_at) = ?", month)
+	}
+
+	query.Order("created_at desc").Find(&leaves)
 	utils.Success(c, "Daftar izin kamu", leaves)
 }
 

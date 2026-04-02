@@ -28,8 +28,8 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
       EmployeeAttendanceTab(onNavigate: (i) => setState(() => _currentIndex = i)),
       const EmployeeHistoryTab(),
       const EmployeeLeaveTab(),
-      const EmployeeProfileTab(),
       const EmployeeSalaryTab(),
+      const EmployeeProfileTab(),
     ];
   }
 
@@ -73,8 +73,8 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
           BottomNavItem(icon: Icons.account_balance_wallet_rounded, label: 'Beranda'),
           BottomNavItem(icon: Icons.receipt_long_rounded, label: 'Riwayat'),
           BottomNavItem(icon: Icons.assignment_turned_in_rounded, label: 'Izin'),
-          BottomNavItem(icon: Icons.person_rounded, label: 'Profil'),
           BottomNavItem(icon: Icons.payments_rounded, label: 'Gaji'),
+          BottomNavItem(icon: Icons.settings_rounded, label: 'Pengaturan'),
         ],
       ),
     );

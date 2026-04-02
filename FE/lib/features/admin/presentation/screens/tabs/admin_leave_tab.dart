@@ -10,11 +10,19 @@ class AdminLeaveTab extends StatefulWidget {
   State<AdminLeaveTab> createState() => _AdminLeaveTabState();
 }
 
-class _AdminLeaveTabState extends State<AdminLeaveTab> with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+class _AdminLeaveTabState extends State<AdminLeaveTab> {
   List<dynamic> _leaves = [];
   bool _loading = false;
-  String _selectedStatus = 'PENDING';
+  String _selectedStatus = 'ALL';
+  final TextEditingController _searchCtrl = TextEditingController();
+  int _selectedMonth = DateTime.now().month;
+  int _selectedYear = DateTime.now().year;
+
+  final List<String> _monthNames = [
+    'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+    'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+  ];
+  final List<int> _years = [2024, 2025, 2026];
 
   final _statusLabels = {'PENDING': 'Menunggu', 'APPROVED': 'Disetujui', 'REJECTED': 'Ditolak'};
   final _statusColors = {
@@ -26,25 +34,23 @@ class _AdminLeaveTabState extends State<AdminLeaveTab> with SingleTickerProvider
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
-    _tabController.addListener(() {
-      final statuses = ['PENDING', 'APPROVED', 'REJECTED'];
-      _selectedStatus = statuses[_tabController.index];
-      _loadLeaves();
-    });
     _loadLeaves();
   }
 
   @override
   void dispose() {
-    _tabController.dispose();
+    _searchCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _loadLeaves() async {
     setState(() => _loading = true);
     try {
-      final res = await ApiClient.get('/api/admin/leaves?status=$_selectedStatus');
+      String url = '/api/admin/leaves?month=$_selectedMonth&year=$_selectedYear';
+      if (_selectedStatus != 'ALL') url += '&status=$_selectedStatus';
+      if (_searchCtrl.text.isNotEmpty) url += '&search=${Uri.encodeComponent(_searchCtrl.text)}';
+
+      final res = await ApiClient.get(url);
       if (res.success && mounted) {
         setState(() => _leaves = res.data ?? []);
       }
@@ -261,140 +267,167 @@ class _AdminLeaveTabState extends State<AdminLeaveTab> with SingleTickerProvider
 
   @override
   Widget build(BuildContext context) {
+
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light.copyWith(
         statusBarColor: Colors.transparent,
       ),
       child: Scaffold(
         backgroundColor: const Color(0xFFF8FAFC),
-      body: Column(
-        children: [
-          // Premium Header
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.only(top: 64, left: 24, right: 24, bottom: 0),
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Color(0xFF0F172A), Color(0xFF1E3A8A), Color(0xFF2563EB)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
+        body: Column(
+          children: [
+            // Premium Header
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.only(top: 64, left: 24, right: 24, bottom: 20),
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Color(0xFF0F172A), Color(0xFF1E3A8A), Color(0xFF2563EB)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.only(
+                  bottomLeft: Radius.circular(32),
+                  bottomRight: Radius.circular(32),
+                ),
               ),
-              borderRadius: BorderRadius.only(
-                bottomLeft: Radius.circular(32),
-                bottomRight: Radius.circular(32),
-              ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Manajemen Izin',
-                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Tinjau dan proses pengajuan izin karyawan',
-                  style: TextStyle(fontSize: 13, color: Colors.white.withOpacity(0.75)),
-                ),
-                const SizedBox(height: 24),
-                // Premium TabBar
-                TabBar(
-                  controller: _tabController,
-                  labelColor: Colors.white,
-                  unselectedLabelColor: Colors.white.withOpacity(0.5),
-                  indicatorColor: Colors.white,
-                  dividerColor: Colors.transparent,
-                  indicatorWeight: 3,
-                  labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                  tabs: const [
-                    Tab(text: 'Menunggu'),
-                    Tab(text: 'Disetujui'),
-                    Tab(text: 'Ditolak'),
-                  ],
-                ),
-              ],
-            ),
-          ),
-
-          Expanded(
-            child: _loading
-                ? const Center(child: CircularProgressIndicator(color: Color(0xFF2563EB)))
-                : _leaves.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(24),
-                              decoration: BoxDecoration(color: Colors.grey.shade100, shape: BoxShape.circle),
-                              child: Icon(Icons.assignment_late_rounded, size: 64, color: Colors.grey.shade300),
-                            ),
-                            const SizedBox(height: 16),
-                            Text('Tidak ada data izin', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold)),
-                          ],
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Manajemen Izin',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
+                  ),
+                  const SizedBox(height: 16),
+                  // Filters inside header
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        _filterChip(
+                          label: '${_monthName(_selectedMonth)} $_selectedYear',
+                          icon: Icons.calendar_today_rounded,
+                          onTap: _showMonthYearPicker,
                         ),
-                      )
-                    : RefreshIndicator(
-                        onRefresh: _loadLeaves,
-                        color: const Color(0xFF2563EB),
-                        child: ListView.separated(
-                          padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
-                          itemCount: _leaves.length,
-                          separatorBuilder: (_, __) => const SizedBox(height: 12),
-                          itemBuilder: (_, i) {
-                            final l = _leaves[i] as Map<String, dynamic>;
-                            final status = l['status'] ?? '';
-                            final color = _statusColors[status] ?? Colors.grey;
-                            return Container(
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(20),
-                                boxShadow: [
-                                  BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4))
-                                ],
+                        const SizedBox(width: 8),
+                        _filterChip(
+                          label: _selectedStatus == 'ALL' ? 'Semua Izin' : (_statusLabels[_selectedStatus] ?? 'Status'),
+                          icon: Icons.filter_list_rounded,
+                          onTap: _showStatusPicker,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  // Search Bar inside Header
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: TextField(
+                      controller: _searchCtrl,
+                      onChanged: (v) => _loadLeaves(),
+                      style: const TextStyle(color: Colors.white),
+                      decoration: const InputDecoration(
+                        hintText: 'Cari nama karyawan...',
+                        hintStyle: TextStyle(color: Colors.white70, fontSize: 13),
+                        prefixIcon: Icon(Icons.search_rounded, color: Colors.white70),
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            Expanded(
+              child: _loading
+                  ? const Center(child: CircularProgressIndicator(color: Color(0xFF2563EB)))
+                  : _leaves.isEmpty
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(24),
+                                decoration: BoxDecoration(color: Colors.grey.shade100, shape: BoxShape.circle),
+                                child: Icon(
+                                  _searchCtrl.text.isEmpty ? Icons.assignment_late_rounded : Icons.search_off_rounded, 
+                                  size: 64, 
+                                  color: Colors.grey.shade300
+                                ),
                               ),
-                              child: Material(
-                                color: Colors.transparent,
-                                child: InkWell(
+                              const SizedBox(height: 16),
+                              Text(
+                                _searchCtrl.text.isEmpty ? 'Tidak ada data izin' : 'Pencarian tidak ditemukan', 
+                                style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold)
+                              ),
+                            ],
+                          ),
+                        )
+                      : RefreshIndicator(
+                          onRefresh: _loadLeaves,
+                          color: const Color(0xFF2563EB),
+                          child: ListView.separated(
+                            padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
+                            itemCount: _leaves.length,
+                            separatorBuilder: (_, __) => const SizedBox(height: 12),
+                            itemBuilder: (_, i) {
+                              final l = _leaves[i] as Map<String, dynamic>;
+                              final status = l['status'] ?? '';
+                              final color = _statusColors[status] ?? Colors.grey;
+                              return Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
                                   borderRadius: BorderRadius.circular(20),
-                                  onTap: () => _showDetail(l),
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(16),
-                                    child: Row(
-                                      children: [
-                                        Container(
-                                          width: 48,
-                                          height: 48,
-                                          decoration: BoxDecoration(
-                                            color: color.withOpacity(0.1),
-                                            borderRadius: BorderRadius.circular(14),
+                                  boxShadow: [
+                                    BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4))
+                                  ],
+                                ),
+                                child: Material(
+                                  color: Colors.transparent,
+                                  child: InkWell(
+                                    borderRadius: BorderRadius.circular(20),
+                                    onTap: () => _showDetail(l),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(16),
+                                      child: Row(
+                                        children: [
+                                          Container(
+                                            width: 48,
+                                            height: 48,
+                                            decoration: BoxDecoration(
+                                              color: color.withOpacity(0.1),
+                                              borderRadius: BorderRadius.circular(14),
+                                            ),
+                                            child: Icon(
+                                              l['type'] == 'SAKIT' ? Icons.sick_rounded : Icons.event_note_rounded,
+                                              color: color,
+                                              size: 24,
+                                            ),
                                           ),
-                                          child: Icon(
-                                            l['type'] == 'SAKIT' ? Icons.sick_rounded : Icons.event_note_rounded,
-                                            color: color,
-                                            size: 24,
+                                          const SizedBox(width: 16),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(l['title'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF0F172A))),
+                                                const SizedBox(height: 4),
+                                                Text(
+                                                  '${l['user_name'] ?? '-'} • ${l['type'] ?? '-'}',
+                                                  style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+                                                ),
+                                              ],
+                                            ),
                                           ),
-                                        ),
-                                        const SizedBox(width: 16),
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              Text(l['title'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF0F172A))),
-                                              const SizedBox(height: 4),
-                                              Text(
-                                                '${l['user_name'] ?? '-'} • ${l['type'] ?? '-'}',
-                                                style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                        const Icon(Icons.chevron_right_rounded, color: Colors.grey, size: 24),
-                                      ],
+                                          const Icon(Icons.chevron_right_rounded, color: Colors.grey, size: 24),
+                                        ],
+                                      ),
                                     ),
                                   ),
                                 ),
-                              ),
                               );
                             },
                           ),
@@ -404,5 +437,92 @@ class _AdminLeaveTabState extends State<AdminLeaveTab> with SingleTickerProvider
         ),
       ),
     );
+  }
+
+  void _showMonthYearPicker() async {
+     await showModalBottomSheet(
+       context: context,
+       builder: (ctx) => Container(
+         padding: const EdgeInsets.all(24),
+         height: 300,
+         child: Column(
+           children: [
+             const Text('Pilih Periode', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+             const Expanded(child: SizedBox()),
+             Row(
+               children: [
+                 Expanded(
+                   child: DropdownButton<int>(
+                     isExpanded: true,
+                     value: _selectedMonth,
+                     items: List.generate(12, (i) => DropdownMenuItem(value: i+1, child: Text(_monthName(i+1)))),
+                     onChanged: (v) { setState(() => _selectedMonth = v!); Navigator.pop(ctx); _loadLeaves(); },
+                   ),
+                 ),
+                 const SizedBox(width: 16),
+                  Expanded(
+                   child: DropdownButton<int>(
+                     isExpanded: true,
+                     value: _selectedYear,
+                     items: List.generate(5, (i) => DropdownMenuItem(value: DateTime.now().year - i, child: Text('${DateTime.now().year - i}'))),
+                     onChanged: (v) { setState(() => _selectedYear = v!); Navigator.pop(ctx); _loadLeaves(); },
+                   ),
+                 ),
+               ],
+             ),
+             const Expanded(child: SizedBox()),
+           ],
+         ),
+       ),
+     );
+  }
+
+  void _showStatusPicker() async {
+    await showModalBottomSheet(
+      context: context,
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Pilih Status', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+            const SizedBox(height: 16),
+            ListTile(
+              title: const Text('Semua Izin'),
+              onTap: () { setState(() => _selectedStatus = 'ALL'); Navigator.pop(ctx); _loadLeaves(); },
+            ),
+            ...(_statusLabels.entries.map((e) => ListTile(
+              title: Text(e.value),
+              onTap: () { setState(() => _selectedStatus = e.key); Navigator.pop(ctx); _loadLeaves(); },
+            ))),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _filterChip({required String label, required IconData icon, required VoidCallback onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.15),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: Colors.white70, size: 14),
+            const SizedBox(width: 6),
+            Text(label, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500)),
+            const Icon(Icons.arrow_drop_down_rounded, color: Colors.white70),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _monthName(int m) {
+    return ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'][m-1];
   }
 }

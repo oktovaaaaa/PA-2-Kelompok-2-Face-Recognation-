@@ -13,16 +13,50 @@ class EmployeeHistoryTab extends StatefulWidget {
 }
 
 class _EmployeeHistoryTabState extends State<EmployeeHistoryTab> {
-  String _filter = 'month';
-  int? _selectedMonth;
-  int? _selectedYear;
+  String _filter = ''; // Prioritaskan selectedMonth/Year
+  int _selectedMonth = DateTime.now().month;
+  int _selectedYear = DateTime.now().year;
+  List<int> _availableYears = [DateTime.now().year];
   List<dynamic> _records = [];
   Map<String, dynamic>? _stats;
   bool _loading = false;
 
+  final List<String> _months = [
+    'Semua Bulan', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+    'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+  ];
+
   @override
   void initState() {
     super.initState();
+    _fetchInitialData();
+  }
+
+  Future<void> _fetchInitialData() async {
+    setState(() => _loading = true);
+    try {
+      // Ambil data profil untuk tahu tahun pendaftaran (Created At)
+      final res = await ApiClient.get('/api/auth/me');
+      if (res.success && res.data != null) {
+        final userData = res.data!;
+        if (userData['created_at'] != null) {
+          final createdAt = DateTime.parse(userData['created_at']);
+          final startYear = createdAt.year;
+          final currentYear = DateTime.now().year;
+          
+          setState(() {
+            _availableYears = [];
+            for (int y = currentYear; y >= startYear; y--) {
+              _availableYears.add(y);
+            }
+            // Jika tahun saat ini tidak ada di daftar (mungkin jam lokal salah), paksa ada
+            if (!_availableYears.contains(currentYear)) _availableYears.insert(0, currentYear);
+          });
+        }
+      }
+    } catch (_) {
+      // Fallback jika gagal
+    }
     _load();
   }
 
@@ -30,11 +64,13 @@ class _EmployeeHistoryTabState extends State<EmployeeHistoryTab> {
     setState(() => _loading = true);
     try {
       String url = '/api/employee/attendance/history?';
-      if (_selectedYear != null) {
-        url += 'year=$_selectedYear';
-        if (_selectedMonth != null) url += '&month=$_selectedMonth';
-      } else {
+      if (_filter != '') {
         url += 'filter=$_filter';
+      } else {
+        url += 'year=$_selectedYear';
+        if (_selectedMonth != 0) {
+          url += '&month=$_selectedMonth';
+        }
       }
 
       final res = await ApiClient.get(url);
@@ -112,8 +148,8 @@ class _EmployeeHistoryTabState extends State<EmployeeHistoryTab> {
             ElevatedButton(
               onPressed: () {
                 setState(() {
-                  _selectedMonth = tempMonth;
-                  _selectedYear = tempYear;
+                  _selectedMonth = tempMonth ?? DateTime.now().month;
+                  _selectedYear = tempYear ?? DateTime.now().year;
                   _filter = '';
                 });
                 Navigator.pop(context);
@@ -179,10 +215,77 @@ class _EmployeeHistoryTabState extends State<EmployeeHistoryTab> {
                           ),
                         ],
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.filter_list_rounded, color: Colors.white),
-                        onPressed: _showFilterPicker,
-                        tooltip: 'Filter Kustom',
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  // Month & Year Pickers (Premium White)
+                  Row(
+                    children: [
+                      Expanded(
+                        flex: 2,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<int>(
+                              value: _selectedMonth,
+                              dropdownColor: Colors.white,
+                              icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF0F172A)),
+                              items: [
+                                for (int i = 0; i <= 12; i++)
+                                  DropdownMenuItem(
+                                    value: i,
+                                    child: Text(
+                                      _months[i],
+                                      style: const TextStyle(color: Color(0xFF0F172A), fontSize: 13, fontWeight: FontWeight.w600),
+                                    ),
+                                  ),
+                              ],
+                              onChanged: (v) {
+                                if (v != null) {
+                                  setState(() {
+                                    _selectedMonth = v;
+                                    _filter = '';
+                                  });
+                                  _load();
+                                }
+                              },
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<int>(
+                              value: _selectedYear,
+                              dropdownColor: Colors.white,
+                              icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF0F172A)),
+                              items: [
+                                for (int y in _availableYears)
+                                  DropdownMenuItem(
+                                    value: y,
+                                    child: Text(
+                                      y.toString(),
+                                      style: const TextStyle(color: Color(0xFF0F172A), fontSize: 13, fontWeight: FontWeight.w600),
+                                    ),
+                                  ),
+                              ],
+                              onChanged: (v) {
+                                if (v != null) {
+                                  setState(() {
+                                    _selectedYear = v;
+                                    _filter = '';
+                                  });
+                                  _load();
+                                }
+                              },
+                            ),
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -197,8 +300,13 @@ class _EmployeeHistoryTabState extends State<EmployeeHistoryTab> {
                             onTap: () {
                               setState(() {
                                 _filter = f.$1;
-                                _selectedMonth = null;
-                                _selectedYear = null;
+                                // Sinkronkan bulan/tahun jika memilih filter "Bulan" atau "Tahun"
+                                if (f.$1 == 'month') {
+                                  _selectedMonth = DateTime.now().month;
+                                  _selectedYear = DateTime.now().year;
+                                } else if (f.$1 == 'year') {
+                                  _selectedYear = DateTime.now().year;
+                                }
                               });
                               _load();
                             },
@@ -218,28 +326,6 @@ class _EmployeeHistoryTabState extends State<EmployeeHistoryTab> {
                                 ),
                               ),
                             ),
-                          ),
-                        ),
-                      if (_selectedYear != null)
-                         Padding(
-                          padding: const EdgeInsets.only(bottom: 20),
-                          child: Chip(
-                            label: Text(
-                              _selectedMonth != null ? '${_selectedMonth}/${_selectedYear}' : '$_selectedYear',
-                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
-                            ),
-                            backgroundColor: Colors.white.withOpacity(0.2),
-                            onDeleted: () {
-                              setState(() {
-                                _selectedMonth = null;
-                                _selectedYear = null;
-                                _filter = 'month';
-                              });
-                              _load();
-                            },
-                            deleteIconColor: Colors.white70,
-                            side: BorderSide.none,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                           ),
                         ),
                     ],

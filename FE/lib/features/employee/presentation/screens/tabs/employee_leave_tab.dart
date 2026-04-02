@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../../../core/network/api_client.dart';
+import '../../../../../core/constants/app_constants.dart';
 import 'package:flutter/services.dart';
 import '../../../../common/widgets/app_dialog.dart';
 
@@ -17,17 +18,30 @@ class EmployeeLeaveTab extends StatefulWidget {
 class _EmployeeLeaveTabState extends State<EmployeeLeaveTab> {
   List<dynamic> _leaves = [];
   bool _loading = false;
+  
+  // Filtering states
+  int _selectedMonth = 0; // Default: Semua Bulan
+  int _selectedYear = DateTime.now().year;
+  
+  // Selection states
+  bool _isSelectionMode = false;
+  final Set<String> _selectedIds = {};
 
   final _statusColors = {
-    'PENDING': Colors.orange,
-    'APPROVED': Colors.green,
-    'REJECTED': Colors.red,
+    'PENDING': const Color(0xFFF59E0B),
+    'APPROVED': const Color(0xFF10B981),
+    'REJECTED': const Color(0xFFEF4444),
   };
   final _statusLabels = {
     'PENDING': 'Menunggu',
     'APPROVED': 'Disetujui',
     'REJECTED': 'Ditolak',
   };
+
+  final List<String> _months = [
+    'Semua Bulan', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+    'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+  ];
 
   @override
   void initState() {
@@ -38,7 +52,8 @@ class _EmployeeLeaveTabState extends State<EmployeeLeaveTab> {
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      final res = await ApiClient.get('/api/employee/leaves');
+      final query = 'month=${_selectedMonth == 0 ? "" : _selectedMonth}&year=$_selectedYear';
+      final res = await ApiClient.get('/api/employee/leaves?$query');
       if (res.success && mounted) setState(() => _leaves = res.data ?? []);
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -212,7 +227,6 @@ class _EmployeeLeaveTabState extends State<EmployeeLeaveTab> {
     try {
       final res = await ApiClient.delete('/api/employee/leaves/$id');
       if (!mounted) return;
-      if (!mounted) return;
       if (res.success) {
         AppDialog.showSuccess(context, 'Dihapus dari riwayat kamu');
         _load();
@@ -220,6 +234,176 @@ class _EmployeeLeaveTabState extends State<EmployeeLeaveTab> {
         AppDialog.showError(context, res.message ?? 'Gagal menghapus riwayat');
       }
     } catch (_) {}
+  }
+
+  Future<void> _bulkDelete() async {
+    if (_selectedIds.isEmpty) return;
+    final confirmed = await AppDialog.showConfirm(
+      context,
+      title: 'Hapus Terpilih',
+      message: 'Hapus ${_selectedIds.length} izin terpilih dari riwayat?',
+      confirmText: 'Hapus',
+      confirmColor: Colors.red,
+    );
+    if (confirmed != true) return;
+
+    setState(() => _loading = true);
+    try {
+      final res = await ApiClient.post('/api/employee/leaves/bulk-delete', {'ids': _selectedIds.toList()});
+      if (res.success) {
+        AppDialog.showSuccess(context, 'Berhasil menghapus ${_selectedIds.length} izin');
+        setState(() {
+          _isSelectionMode = false;
+          _selectedIds.clear();
+        });
+        _load();
+      } else {
+        AppDialog.showError(context, res.message ?? 'Gagal menghapus');
+      }
+    } finally {
+      setState(() => _loading = false);
+    }
+  }
+
+  void _showDetailView(Map<String, dynamic> l) {
+    final status = l['status'] ?? 'PENDING';
+    final color = _statusColors[status] ?? Colors.grey;
+    final createdAt = l['created_at'] != null ? DateTime.parse(l['created_at']) : DateTime.now();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 48,
+                height: 4,
+                decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(16)),
+                  child: Icon(l['type'] == 'SAKIT' ? Icons.sick_rounded : Icons.description_rounded, color: color),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(l['title'] ?? '-', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF0F172A))),
+                      Text(l['type'] ?? '-', style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(20)),
+                  child: Text(_statusLabels[status] ?? status, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 12)),
+                ),
+              ],
+            ),
+            const Divider(height: 40),
+            const Text('Keterangan / Alasan', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF64748B), fontSize: 12)),
+            const SizedBox(height: 8),
+            Text(l['description'] ?? 'Tidak ada keterangan', style: const TextStyle(fontSize: 15, height: 1.5, color: Color(0xFF1E293B))),
+            if (l['photo_url'] != null && (l['photo_url'] as String).isNotEmpty) ...[
+              const SizedBox(height: 20),
+              const Text('Foto Bukti', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF64748B), fontSize: 12)),
+              const SizedBox(height: 10),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: Image.network(
+                  AppConstants.baseUrl + l['photo_url'],
+                  height: 200,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => Container(
+                    height: 200,
+                    color: Colors.grey.shade100,
+                    child: const Icon(Icons.broken_image_outlined, color: Colors.grey),
+                  ),
+                ),
+              ),
+            ],
+            if (l['admin_note'] != null && (l['admin_note'] as String).isNotEmpty) ...[
+              const SizedBox(height: 20),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(color: Colors.grey.shade50, borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.grey.shade200)),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.rate_review_rounded, size: 16, color: Color(0xFF64748B)),
+                        SizedBox(width: 8),
+                        Text('Catatan Admin', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF64748B), fontSize: 12)),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(l['admin_note'], style: const TextStyle(color: Color(0xFF1E293B), fontSize: 14, fontStyle: FontStyle.italic)),
+                  ],
+                ),
+              ),
+            ],
+            const SizedBox(height: 32),
+            Row(
+              children: [
+                if (status == 'PENDING')
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        side: BorderSide(color: Colors.grey.shade300),
+                      ),
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _showForm(existing: l);
+                      },
+                      icon: const Icon(Icons.edit_rounded, size: 20, color: Color(0xFF2563EB)),
+                      label: const Text('Edit Pengajuan', style: TextStyle(color: Color(0xFF2563EB), fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                if (status == 'PENDING') const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red.shade50,
+                      foregroundColor: Colors.red,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      elevation: 0,
+                    ),
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _deleteLeave(l['id']);
+                    },
+                    icon: const Icon(Icons.delete_outline_rounded, size: 20),
+                    label: const Text('Hapus Riwayat', style: TextStyle(fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -230,16 +414,24 @@ class _EmployeeLeaveTabState extends State<EmployeeLeaveTab> {
       ),
       child: Scaffold(
         backgroundColor: const Color(0xFFF8FAFC),
-        floatingActionButton: FloatingActionButton.extended(
-          onPressed: () => _showForm(),
-          backgroundColor: const Color(0xFF2563EB),
-          foregroundColor: Colors.white,
-          elevation: 4,
-          highlightElevation: 8,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          icon: const Icon(Icons.add_rounded),
-          label: const Text('Ajukan Izin', style: TextStyle(fontWeight: FontWeight.bold)),
-        ),
+        floatingActionButton: _isSelectionMode
+            ? FloatingActionButton.extended(
+                onPressed: _bulkDelete,
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+                icon: const Icon(Icons.delete_sweep_rounded),
+                label: const Text('Hapus Terpilih', style: TextStyle(fontWeight: FontWeight.bold)),
+              )
+            : FloatingActionButton.extended(
+                onPressed: () => _showForm(),
+                backgroundColor: const Color(0xFF2563EB),
+                foregroundColor: Colors.white,
+                elevation: 4,
+                highlightElevation: 8,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                icon: const Icon(Icons.add_rounded),
+                label: const Text('Ajukan Izin', style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
         body: Column(
           children: [
             // Premium Header
@@ -260,15 +452,92 @@ class _EmployeeLeaveTabState extends State<EmployeeLeaveTab> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Pengajuan Izin',
-                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Pengajuan Izin',
+                        style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white),
+                      ),
+                      if (_isSelectionMode)
+                        TextButton.icon(
+                          onPressed: () => setState(() {
+                            _isSelectionMode = false;
+                            _selectedIds.clear();
+                          }),
+                          icon: const Icon(Icons.close_rounded, color: Colors.white, size: 18),
+                          label: const Text('Batal', style: TextStyle(color: Colors.white)),
+                        ),
+                    ],
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Kelola ketidakhadiran Anda di sini',
+                    _isSelectionMode ? '${_selectedIds.length} dipilih' : 'Kelola ketidakhadiran Anda di sini',
                     style: TextStyle(fontSize: 13, color: Colors.white.withOpacity(0.75)),
                   ),
+                  if (!_isSelectionMode) ...[
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          flex: 2,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
+                            child: DropdownButtonHideUnderline(
+                              child: DropdownButton<int>(
+                                value: _selectedMonth,
+                                dropdownColor: Colors.white,
+                                icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF0F172A)),
+                                items: [
+                                  for (int i = 0; i < _months.length; i++)
+                                    DropdownMenuItem(
+                                      value: i,
+                                      child: Text(
+                                        _months[i],
+                                        style: const TextStyle(color: Color(0xFF0F172A), fontSize: 13, fontWeight: FontWeight.w600),
+                                      ),
+                                    ),
+                                ],
+                                onChanged: (v) {
+                                  if (v != null) setState(() => _selectedMonth = v);
+                                  _load();
+                                },
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
+                            child: DropdownButtonHideUnderline(
+                              child: DropdownButton<int>(
+                                value: _selectedYear,
+                                dropdownColor: Colors.white,
+                                icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF0F172A)),
+                                items: [
+                                  for (int y = DateTime.now().year - 2; y <= DateTime.now().year; y++)
+                                    DropdownMenuItem(
+                                      value: y,
+                                      child: Text(
+                                        y.toString(),
+                                        style: const TextStyle(color: Color(0xFF0F172A), fontSize: 13, fontWeight: FontWeight.w600),
+                                      ),
+                                    ),
+                                ],
+                                onChanged: (v) {
+                                  if (v != null) setState(() => _selectedYear = v);
+                                  _load();
+                                },
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -300,83 +569,121 @@ class _EmployeeLeaveTabState extends State<EmployeeLeaveTab> {
                             separatorBuilder: (_, __) => const SizedBox(height: 12),
                             itemBuilder: (_, i) {
                               final l = _leaves[i] as Map<String, dynamic>;
+                              final id = l['id'].toString();
                               final status = l['status'] ?? '';
                               final color = _statusColors[status] ?? Colors.grey;
                               final isPending = status == 'PENDING';
-                              return Container(
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(20),
-                                  boxShadow: [
-                                    BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4))
-                                  ],
-                                ),
-                                child: Material(
-                                  color: Colors.transparent,
-                                  child: InkWell(
+                              final isSelected = _selectedIds.contains(id);
+
+                              return AnimatedOpacity(
+                                duration: const Duration(milliseconds: 300),
+                                opacity: _isSelectionMode && !isSelected ? 0.6 : 1.0,
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
                                     borderRadius: BorderRadius.circular(20),
-                                    onTap: () {}, // Detail view can be added here
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(16),
-                                      child: Row(
-                                        children: [
-                                          Container(
-                                            width: 48,
-                                            height: 48,
-                                            decoration: BoxDecoration(
-                                              color: color.withOpacity(0.1),
-                                              borderRadius: BorderRadius.circular(14),
-                                            ),
-                                            child: Icon(
-                                              l['type'] == 'SAKIT' ? Icons.sick_rounded : Icons.event_note_rounded,
-                                              color: color,
-                                              size: 24,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 16),
-                                          Expanded(
-                                            child: Column(
-                                              crossAxisAlignment: CrossAxisAlignment.start,
-                                              children: [
-                                                Text(l['title'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF0F172A))),
-                                                const SizedBox(height: 4),
-                                                Text(
-                                                  l['type'] ?? '',
-                                                  style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                          Column(
-                                            crossAxisAlignment: CrossAxisAlignment.end,
-                                            children: [
-                                              Container(
-                                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                                decoration: BoxDecoration(
-                                                  color: color.withOpacity(0.1),
-                                                  borderRadius: BorderRadius.circular(20),
-                                                ),
-                                                child: Text(
-                                                  _statusLabels[status] ?? status,
-                                                  style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 11),
-                                                ),
+                                    border: isSelected ? Border.all(color: const Color(0xFF2563EB), width: 2) : null,
+                                    boxShadow: [
+                                      BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4))
+                                    ],
+                                  ),
+                                  child: Material(
+                                    color: Colors.transparent,
+                                    child: InkWell(
+                                      borderRadius: BorderRadius.circular(20),
+                                      onLongPress: () {
+                                        setState(() {
+                                          _isSelectionMode = true;
+                                          _selectedIds.add(id);
+                                        });
+                                      },
+                                      onTap: () {
+                                        if (_isSelectionMode) {
+                                          setState(() {
+                                            if (isSelected) {
+                                              _selectedIds.remove(id);
+                                              if (_selectedIds.isEmpty) _isSelectionMode = false;
+                                            } else {
+                                              _selectedIds.add(id);
+                                            }
+                                          });
+                                        } else {
+                                          _showDetailView(l);
+                                        }
+                                      },
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(16),
+                                        child: Row(
+                                          children: [
+                                            if (_isSelectionMode) ...[
+                                              Icon(
+                                                isSelected ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+                                                color: isSelected ? const Color(0xFF2563EB) : Colors.grey,
                                               ),
-                                              const SizedBox(height: 8),
-                                              PopupMenuButton<String>(
-                                                icon: const Icon(Icons.more_horiz_rounded, color: Colors.grey, size: 20),
-                                                onSelected: (v) {
-                                                  if (v == 'edit') _showForm(existing: l);
-                                                  if (v == 'delete') _deleteLeave(l['id']);
-                                                },
-                                                itemBuilder: (_) => [
-                                                  if (isPending)
-                                                    const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit_rounded, size: 16), SizedBox(width: 8), Text('Edit')])),
-                                                  const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete_rounded, size: 16, color: Colors.red), SizedBox(width: 8), Text('Hapus', style: TextStyle(color: Colors.red))])),
+                                              const SizedBox(width: 12),
+                                            ],
+                                            Container(
+                                              width: 48,
+                                              height: 48,
+                                              decoration: BoxDecoration(
+                                                color: color.withOpacity(0.1),
+                                                borderRadius: BorderRadius.circular(14),
+                                              ),
+                                              child: Icon(
+                                                l['type'] == 'SAKIT' ? Icons.sick_rounded : Icons.event_note_rounded,
+                                                color: color,
+                                                size: 24,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 16),
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                children: [
+                                                  Text(l['title'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF0F172A))),
+                                                  const SizedBox(height: 4),
+                                                  Text(
+                                                    l['type'] ?? '',
+                                                    style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+                                                  ),
                                                 ],
                                               ),
-                                            ],
-                                          ),
-                                        ],
+                                            ),
+                                            Column(
+                                              crossAxisAlignment: CrossAxisAlignment.end,
+                                              children: [
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                                  decoration: BoxDecoration(
+                                                    color: color.withOpacity(0.1),
+                                                    borderRadius: BorderRadius.circular(20),
+                                                  ),
+                                                  child: Text(
+                                                    _statusLabels[status] ?? status,
+                                                    style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 11),
+                                                  ),
+                                                ),
+                                                if (!_isSelectionMode) ...[
+                                                  const SizedBox(height: 8),
+                                                  PopupMenuButton<String>(
+                                                    icon: const Icon(Icons.more_horiz_rounded, color: Colors.grey, size: 20),
+                                                    onSelected: (v) {
+                                                      if (v == 'edit') _showForm(existing: l);
+                                                      if (v == 'delete') _deleteLeave(id);
+                                                      if (v == 'detail') _showDetailView(l);
+                                                    },
+                                                    itemBuilder: (_) => [
+                                                      const PopupMenuItem(value: 'detail', child: Row(children: [Icon(Icons.visibility_rounded, size: 16), SizedBox(width: 8), Text('Detail')])),
+                                                      if (isPending)
+                                                        const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit_rounded, size: 16), SizedBox(width: 8), Text('Edit')])),
+                                                      const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete_rounded, size: 16, color: Colors.red), SizedBox(width: 8), Text('Hapus', style: TextStyle(color: Colors.red))])),
+                                                    ],
+                                                  ),
+                                                ],
+                                              ],
+                                            ),
+                                          ],
+                                        ),
                                       ),
                                     ),
                                   ),

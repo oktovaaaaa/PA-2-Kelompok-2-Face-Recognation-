@@ -12,11 +12,15 @@ import '../../../../../core/network/api_client.dart';
 import '../../../../../core/storage/session_storage.dart';
 import '../../../../../core/utils/error_mapper.dart';
 import '../../../../../core/constants/app_constants.dart';
+import '../../../../../core/providers/notification_provider.dart';
 import '../../../../auth/data/auth_repository.dart';
 import '../../../../auth/presentation/screens/pending_employees_screen.dart';
 import '../attendance_report_screen.dart';
 import '../admin_payroll_screen.dart';
+import 'admin_position_tab.dart';
 import '../../../../common/widgets/app_dialog.dart';
+import '../../../../common/presentation/screens/notification_screen.dart';
+import 'package:provider/provider.dart';
 
 class AdminHomeTab extends StatefulWidget {
   final Function(int)? onNavigate;
@@ -32,6 +36,7 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
   String _generatedToken = '';
   final GlobalKey _qrKey = GlobalKey();
   String? _userName;
+  final _statusLabels = {'PENDING': 'Menunggu', 'APPROVED': 'Disetujui', 'REJECTED': 'Ditolak'};
   Map<String, dynamic> _summary = {
     'present': 0,
     'absent': 0,
@@ -51,6 +56,9 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
     super.initState();
     _loadUserName();
     _loadSummary();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<NotificationProvider>().fetchNotifications();
+    });
   }
 
   Future<void> _loadSummary() async {
@@ -188,28 +196,39 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
                   ),
                 ),
                 const SizedBox(width: 12),
-                Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    IconButton(
-                      onPressed: () {}, // Future action
-                      icon: const Icon(Icons.notifications_none_rounded, color: Colors.white, size: 28),
-                    ),
-                    Positioned(
-                      top: 8,
-                      right: 8,
-                      child: Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
-                        constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
-                        child: const Text(
-                          '3',
-                          style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
-                          textAlign: TextAlign.center,
+                Consumer<NotificationProvider>(
+                  builder: (context, notifProvider, child) {
+                    final count = notifProvider.unreadCount;
+                    return Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        IconButton(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => const NotificationScreen()),
+                            );
+                          },
+                          icon: const Icon(Icons.notifications_none_rounded, color: Colors.white, size: 28),
                         ),
-                      ),
-                    ),
-                  ],
+                        if (count > 0)
+                          Positioned(
+                            top: 8,
+                            right: 8,
+                            child: Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                              constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                              child: Text(
+                                count > 9 ? '9+' : count.toString(),
+                                style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                          ),
+                      ],
+                    );
+                  },
                 ),
                 const SizedBox(width: 4),
                 Container(
@@ -274,7 +293,7 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
                                 Icon(Icons.auto_graph_rounded, color: Color(0xFF2563EB), size: 14),
                                 SizedBox(width: 4),
                                 Text(
-                                  'Live Statistics',
+                                  'Statistik Langsung',
                                   style: TextStyle(color: Color(0xFF2563EB), fontSize: 11, fontWeight: FontWeight.bold),
                                 ),
                               ],
@@ -383,11 +402,14 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
                       icon: Icons.work_rounded,
                       label: 'Jabatan',
                       color: const Color(0xFF0F172A),
-                      onTap: () => widget.onNavigate?.call(2),
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => AdminPositionTab()),
+                      ),
                     ),
                     _buildQuickAction(
-                      icon: Icons.person_rounded,
-                      label: 'Profil',
+                      icon: Icons.settings_rounded,
+                      label: 'Pengaturan',
                       color: const Color(0xFF64748B),
                       onTap: () => widget.onNavigate?.call(4),
                     ),

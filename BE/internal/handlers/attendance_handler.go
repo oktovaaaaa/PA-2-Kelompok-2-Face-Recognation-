@@ -11,15 +11,56 @@ import (
 	"employee-system/internal/utils"
 
 	"strconv"
+	"strings"
+
+	"encoding/json"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"sort"
 )
+
+// isHoliday mengecek apakah tanggal tertentu adalah hari libur (manual atau akhir pekan)
+func isHoliday(companyID string, t time.Time) (bool, string) {
+	var settings models.AttendanceSettings
+	database.DB.Where("company_id = ?", companyID).First(&settings)
+
+	// Cek Hari Kerja (WorkDays)
+	// Format: "Monday,Tuesday,Wednesday,Thursday,Friday"
+	dayName := t.Weekday().String()
+	workDays := settings.WorkDays
+	if workDays == "" {
+		// Default: Senin - Jumat
+		workDays = "Monday,Tuesday,Wednesday,Thursday,Friday"
+	}
+
+	if !strings.Contains(workDays, dayName) {
+		return true, fmt.Sprintf("%s (Bukan Hari Kerja)", dayName)
+	}
+
+	// Cek Tabel Hari Libur
+	var holiday models.Holiday
+	// Cari libur yang mencakup tanggal t (Start <= t <= End)
+	err := database.DB.Where("company_id = ? AND ? >= start_date AND ? <= end_date",
+		companyID, t.Format("2006-01-02"), t.Format("2006-01-02")).First(&holiday).Error
+
+	if err == nil {
+		return true, holiday.Name
+	}
+
+	return false, ""
+}
 
 // CheckIn — karyawan melakukan absensi masuk
 func CheckIn(c *gin.Context) {
 	userCtx, _ := c.Get("user")
 	emp := userCtx.(models.User)
+
+	// Cek Hari Libur
+	if holiday, msg := isHoliday(emp.CompanyID, time.Now()); holiday {
+		utils.Error(c, "Hari ini libur: "+msg)
+		return
+	}
 
 	now := time.Now()
 	today := now.Format("2006-01-02")
@@ -72,6 +113,12 @@ func CheckOut(c *gin.Context) {
 
 	now := time.Now()
 	today := now.Format("2006-01-02")
+
+	// Cek Hari Libur
+	if holiday, msg := isHoliday(emp.CompanyID, now); holiday {
+		utils.Error(c, "Hari ini libur: "+msg)
+		return
+	}
 
 	// Ambil pengaturan jam absensi
 	var settings models.AttendanceSettings
@@ -138,16 +185,25 @@ func GetTodayAttendance(c *gin.Context) {
 	displayStatus := att.Status
 	now := time.Now()
 	loc := now.Location()
-	
+
+	// Cek Hari Libur
+	if holiday, msg := isHoliday(emp.CompanyID, now); holiday {
+		utils.Success(c, "Hari ini libur", gin.H{
+			"status":       "HOLIDAY",
+			"holiday_name": msg,
+		})
+		return
+	}
+
 	if err != nil { // Belum ada record absensi hari ini
 		if now.Before(parseT(today, settings.CheckInStart, loc)) {
 			displayStatus = "NOT_STARTED" // Label: Belum Mulai
 		} else if now.After(parseT(today, settings.CheckOutEnd, loc)) {
 			displayStatus = "ABSENT" // Label: Alpha (Hanya jika benar-benar lewat hari/jam pulang)
 		} else if now.After(parseT(today, settings.CheckInEnd, loc)) {
-			displayStatus = "LATE"   // Label: Terlambat
+			displayStatus = "LATE" // Label: Terlambat
 		} else {
-			displayStatus = "READY"  // Siap Absen
+			displayStatus = "READY" // Siap Absen
 		}
 	} else if att.CheckOutTime == nil { // Sudah check-in tapi belum check-out
 		if now.After(parseT(today, settings.CheckOutEnd, loc)) {
@@ -157,19 +213,18 @@ func GetTodayAttendance(c *gin.Context) {
 
 	// Hitung total denda bulan ini untuk estimasi gaji
 	var totalDeductionMonth float64
-	currentMonth := now.Format("2006-01")
-	database.DB.Model(&models.Attendance{}).
-		Where("user_id = ? AND date LIKE ?", emp.ID, currentMonth+"%").
-		Select("SUM(salary_deduction)").
-		Row().Scan(&totalDeductionMonth)
+	
+	// Gunakan logika bersama agar sinkron dengan tab Gaji
+	// Ini akan menghitung semua denda absensi + denda manual + denda Alpha otomatis
+	totalDeductionMonth, _ = CalculateDeductions(emp.ID, int(now.Month()), now.Year())
 
 	utils.Success(c, "Status absensi hari ini", gin.H{
-		"date":                   today,
-		"attendance":             att,
-		"has_record":             err == nil,
-		"settings":               settings,
-		"current_time":           now.Format("15:04:05"),
-		"display_status":         displayStatus,
+		"date":                  today,
+		"attendance":            att,
+		"has_record":            err == nil,
+		"settings":              settings,
+		"current_time":          now.Format("15:04:05"),
+		"display_status":        displayStatus,
 		"total_deduction_month": totalDeductionMonth,
 	})
 }
@@ -179,6 +234,8 @@ func GetTodayAttendance(c *gin.Context) {
 func GetMyAttendanceHistory(c *gin.Context) {
 	userCtx, _ := c.Get("user")
 	emp := userCtx.(models.User)
+	// Refresh from DB agar data CreatedAt 100% akurat
+	database.DB.First(&emp, "id = ?", emp.ID)
 
 	filter := c.Query("filter")
 	month := c.Query("month")
@@ -205,6 +262,79 @@ func GetMyAttendanceHistory(c *gin.Context) {
 
 	var records []models.Attendance
 	query.Order("date desc").Find(&records)
+
+	// --- Dinamis: Tambahkan record ALPHA untuk hari kerja yang terlewat ---
+	// 1. Tentukan tanggal awal & akhir untuk pengecekan
+	var startT, endT time.Time
+	now := time.Now()
+	
+	if year != "" {
+		yInt, _ := strconv.Atoi(year)
+		if month != "" {
+			mInt, _ := strconv.Atoi(month)
+			startT = time.Date(yInt, time.Month(mInt), 1, 0, 0, 0, 0, time.Local)
+			endT = startT.AddDate(0, 1, -1)
+		} else {
+			startT = time.Date(yInt, 1, 1, 0, 0, 0, 0, time.Local)
+			endT = time.Date(yInt, 12, 31, 0, 0, 0, 0, time.Local)
+		}
+	} else {
+		startS := getFilterStart(filter)
+		startT, _ = time.Parse("2006-01-02", startS)
+		endT = now
+	}
+
+	if endT.After(now) {
+		endT = now // Jangan cek masa depan
+	}
+
+	// 2. Map record yang ada untuk lookup cepat
+	existingDates := make(map[string]bool)
+	for _, r := range records {
+		existingDates[r.Date] = true
+	}
+
+	// 3. Ambil pengaturan untuk denda Alpha
+	var settings models.AttendanceSettings
+	database.DB.Where("company_id = ?", emp.CompanyID).First(&settings)
+
+	// 4. Loop setiap tanggal dalam range
+	for d := startT; !d.After(endT); d = d.AddDate(0, 0, 1) {
+		dateStr := d.Format("2006-01-02")
+		
+		// Jangan denda Alpha jika tanggalnya sebelum user bergabung/dibuat
+		if dateStr < emp.CreatedAt.Format("2006-01-02") {
+			continue
+		}
+
+		// Jika belum ada record dan bukan hari ini yang belum selesai
+		if !existingDates[dateStr] {
+			// Cek apakah hari libur/akhir pekan
+			holiday, _ := isHoliday(emp.CompanyID, d)
+			if !holiday {
+				// Cek jam operasional jika itu hari ini
+				if dateStr == now.Format("2006-01-02") {
+					loc := now.Location()
+					checkOutEnd := parseT(dateStr, settings.CheckOutEnd, loc)
+					if now.Before(checkOutEnd) {
+						continue // Masih bisa absen, jangan dianggap alpha dulu
+					}
+				}
+
+				// Tambahkan record Alpha virtual
+				records = append(records, models.Attendance{
+					Date:            dateStr,
+					Status:          "ABSENT",
+					SalaryDeduction: settings.AlphaPenalty,
+				})
+			}
+		}
+	}
+
+	// Urutkan kembali berdasarkan tanggal terbaru (descending)
+	sort.Slice(records, func(i, j int) bool {
+		return records[i].Date > records[j].Date
+	})
 
 	// Hitung statistik
 	var present, absent, leave, sick, late int
@@ -299,7 +429,7 @@ func AdminGetAttendanceHistory(c *gin.Context) {
 			firstDay = time.Date(y, time.Month(monthInt), 1, 0, 0, 0, 0, loc)
 		}
 		lastDay := firstDay.AddDate(0, 1, -1)
-		
+
 		start = firstDay.Format("2006-01-02")
 		end = lastDay.Format("2006-01-02")
 	} else {
@@ -339,21 +469,21 @@ func AdminGetAttendanceHistory(c *gin.Context) {
 
 	for !curr.Before(limit) {
 		dateStr := curr.Format("2006-01-02")
-		
+
 		// Lewati jika sebelum sistem aktif (absen pertama perusahaan)
 		if firstRecordDate != "" && dateStr < firstRecordDate {
 			curr = curr.AddDate(0, 0, -1)
 			continue
 		}
-		
+
 		for _, emp := range employees {
 			att, exists := recordMap[dateStr][emp.ID]
-			
+
 			if exists {
 				// Deteksi status dinamis untuk riwayat (WORKING / EARLY_LEAVE)
 				displayStatus := att.Status
 				isPastTime := dateStr < today || (dateStr == today && now.After(checkOutEndT))
-				
+
 				if att.CheckInTime != nil && att.CheckOutTime == nil {
 					if isPastTime {
 						displayStatus = "EARLY_LEAVE"
@@ -366,7 +496,7 @@ func AdminGetAttendanceHistory(c *gin.Context) {
 					// Copy record agar tidak merubah data asli di Map
 					newAtt := att
 					newAtt.Status = displayStatus
-					
+
 					finalResult = append(finalResult, AttendanceResult{
 						Attendance: newAtt,
 						UserName:   emp.Name,
@@ -399,7 +529,7 @@ func AdminGetAttendanceHistory(c *gin.Context) {
 							Status:    "ABSENT",
 						},
 						UserName:  emp.Name,
-						UserEmail:  emp.Email,
+						UserEmail: emp.Email,
 						IsVirtual: true,
 					})
 				} else if !isAlpha && dateStr == today && (statusFilter == "" || statusFilter == "ALL") {
@@ -413,7 +543,7 @@ func AdminGetAttendanceHistory(c *gin.Context) {
 							Status:    "NOT_YET",
 						},
 						UserName:  emp.Name,
-						UserEmail:  emp.Email,
+						UserEmail: emp.Email,
 						IsVirtual: true,
 					})
 				}
@@ -446,18 +576,56 @@ func GetAttendanceSettings(c *gin.Context) {
 	utils.Success(c, "Pengaturan absensi", settings)
 }
 
+// AdminBulkDeleteAttendance — admin menghapus riwayat absensi massal berdasarkan filter
+func AdminBulkDeleteAttendance(c *gin.Context) {
+	userCtx, _ := c.Get("user")
+	adminUser := userCtx.(models.User)
+
+	filter := c.Query("filter")
+	year := c.Query("year")
+	month := c.Query("month")
+	startDate := c.Query("start_date")
+	endDate := c.Query("end_date")
+
+	query := database.DB.Where("company_id = ?", adminUser.CompanyID)
+
+	switch filter {
+	case "month":
+		if month != "" && year != "" {
+			query = query.Where("date LIKE ?", year+"-"+fmt.Sprintf("%02s", month)+"-%")
+		}
+	case "year":
+		if year != "" {
+			query = query.Where("date LIKE ?", year+"-%")
+		}
+	case "custom":
+		if startDate != "" && endDate != "" {
+			query = query.Where("date BETWEEN ? AND ?", startDate, endDate)
+		}
+	}
+
+	if err := query.Delete(&models.Attendance{}).Error; err != nil {
+		utils.Error(c, "Gagal menghapus riwayat kehadiran")
+		return
+	}
+
+	utils.Success(c, "Riwayat kehadiran berhasil dihapus", nil)
+}
+
 // UpdateAttendanceSettings — admin mengubah pengaturan jam absensi & denda alpha
 func UpdateAttendanceSettings(c *gin.Context) {
 	userCtx, _ := c.Get("user")
 	adminUser := userCtx.(models.User)
 
 	var body struct {
-		CheckInStart  string  `json:"check_in_start"`
-		CheckInEnd    string  `json:"check_in_end"`
-		CheckOutStart string  `json:"check_out_start"`
-		CheckOutEnd   string  `json:"check_out_end"`
-		AlphaPenalty  float64 `json:"alpha_penalty"`
-		LatePenalty   float64 `json:"late_penalty"`
+		CheckInStart      string                   `json:"check_in_start"`
+		CheckInEnd        string                   `json:"check_in_end"`
+		CheckOutStart     string                   `json:"check_out_start"`
+		CheckOutEnd       string                   `json:"check_out_end"`
+		AlphaPenalty      float64                  `json:"alpha_penalty"`
+		LatePenalty       float64                  `json:"late_penalty"`
+		LatePenaltyTiers  []map[string]interface{} `json:"late_penalty_tiers"`
+		WorkDays          string                   `json:"work_days"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		utils.Error(c, "Data tidak valid")
@@ -477,6 +645,11 @@ func UpdateAttendanceSettings(c *gin.Context) {
 	settings.CheckOutEnd = body.CheckOutEnd
 	settings.AlphaPenalty = body.AlphaPenalty
 	settings.LatePenalty = body.LatePenalty
+	settings.WorkDays = body.WorkDays
+
+	// Marshal tiers to string for DB storage
+	tiersJSON, _ := json.Marshal(body.LatePenaltyTiers)
+	settings.LatePenaltyTiers = string(tiersJSON)
 
 	database.DB.Save(&settings)
 	utils.Success(c, "Pengaturan absensi berhasil diperbarui", settings)
@@ -489,6 +662,9 @@ func AdminGetDashboardSummary(c *gin.Context) {
 	now := time.Now()
 	loc := now.Location()
 	today := now.Format("2006-01-02")
+
+	// Cek Hari Libur
+	isHold, holdName := isHoliday(admin.CompanyID, now)
 
 	// Ambil pengaturan jam absensi (dengan fallback default)
 	var settings models.AttendanceSettings
@@ -556,6 +732,8 @@ func AdminGetDashboardSummary(c *gin.Context) {
 		"early_leave":        earlyLeaveCount,
 		"total":              totalEmployees,
 		"is_after_work_hour": now.After(checkOutEndT),
+		"is_holiday":         isHold,
+		"holiday_name":       holdName,
 	})
 }
 

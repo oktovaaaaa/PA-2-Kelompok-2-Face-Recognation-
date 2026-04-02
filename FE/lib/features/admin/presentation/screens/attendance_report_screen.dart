@@ -358,54 +358,56 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
         body: Column(
           children: [
             // Premium Header
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.only(top: 64, left: 24, right: 24, bottom: 20),
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Color(0xFF0F172A), Color(0xFF1E3A8A), Color(0xFF2563EB)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.only(
-                  bottomLeft: Radius.circular(32),
-                  bottomRight: Radius.circular(32),
-                ),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.only(top: 64, left: 16, right: 8, bottom: 20),
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Color(0xFF0F172A), Color(0xFF1E3A8A), Color(0xFF2563EB)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                   Row(
-                    children: [
-                      IconButton(
-                        onPressed: () => Navigator.pop(context),
-                        icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 20),
-                      ),
-                      const SizedBox(width: 8),
-                      const Text(
-                        'Laporan & Statistik',
-                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
-                      ),
-                      const Spacer(),
-                      // Toggle Statistik
-                      IconButton(
-                        onPressed: () => setState(() => _showStats = !_showStats),
-                        icon: Icon(
-                          _showStats ? Icons.bar_chart_rounded : Icons.visibility_rounded,
-                          color: Colors.white.withOpacity(0.9),
-                        ),
-                        tooltip: _showStats ? 'Sembunyikan Statistik' : 'Tampilkan Statistik',
-                      ),
-                      IconButton(
-                        onPressed: _showDownloadDialog,
-                        icon: const Icon(Icons.download_rounded, color: Colors.white),
-                        tooltip: 'Unduh Excel',
-                      ),
-                    ],
-                  ),
-                ],
+              borderRadius: BorderRadius.only(
+                bottomLeft: Radius.circular(32),
+                bottomRight: Radius.circular(32),
               ),
             ),
+            child: Row(
+              children: [
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 20),
+                ),
+                const SizedBox(width: 4),
+                const Expanded(
+                  child: Text(
+                    'Laporan & Statistik',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                IconButton(
+                  onPressed: () => setState(() => _showStats = !_showStats),
+                  icon: Icon(
+                    _showStats ? Icons.bar_chart_rounded : Icons.visibility_rounded,
+                    color: Colors.white.withOpacity(0.9),
+                  ),
+                  tooltip: _showStats ? 'Sembunyikan Statistik' : 'Tampilkan Statistik',
+                ),
+                IconButton(
+                  onPressed: _showDownloadDialog,
+                  icon: const Icon(Icons.download_rounded, color: Colors.white),
+                  tooltip: 'Unduh Excel',
+                ),
+                if (_allRecords.isNotEmpty)
+                  IconButton(
+                    onPressed: _handleBulkDelete,
+                    icon: const Icon(Icons.delete_forever_rounded, color: Colors.redAccent),
+                    tooltip: 'Hapus Riwayat Periode Ini',
+                  ),
+              ],
+            ),
+          ),
 
             // Analytics Section
             if (!_loading && _allRecords.isNotEmpty) _buildAnalyticsSection(),
@@ -806,6 +808,122 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
         }
       });
       _loadData();
+    }
+  }
+
+  Future<void> _handleBulkDelete() async {
+    String periodLabel = '';
+    if (_periodFilter == 'month') {
+      periodLabel = '${DateFormat('MMMM').format(DateTime(2000, _selectedMonth))} $_selectedYear';
+    } else if (_periodFilter == 'year') {
+      periodLabel = 'Tahun $_selectedYear';
+    } else if (_periodFilter == 'custom' && _selectedDateRange != null) {
+      periodLabel = '${DateFormat('dd/MM/yyyy').format(_selectedDateRange!.start)} - ${DateFormat('dd/MM/yyyy').format(_selectedDateRange!.end)}';
+    } else {
+      periodLabel = 'Periode Terpilih';
+    }
+
+    // STEP 1: Konfirmasi Awal
+    final confirm1 = await AppDialog.showConfirm(
+      context,
+      title: 'Hapus Riwayat',
+      message: 'Apakah Anda yakin ingin menghapus seluruh riwayat kehadiran untuk periode $periodLabel bagi SEMUA karyawan?',
+    );
+    if (confirm1 != true) return;
+
+    // STEP 2: Peringatan Bahaya
+    if (!mounted) return;
+    final confirm2 = await AppDialog.showConfirm(
+      context,
+      title: '⚠️ TINDAKAN KRUSIAL',
+      message: 'Data ini sangat penting dan tidak dapat dikembalikan setelah dihapus. Hal ini juga akan mempengaruhi perhitungan gaji karyawan. Lanjutkan dengan risiko Anda sendiri?',
+      confirmText: 'Sangat Yakin',
+      confirmColor: Colors.red.shade700,
+    );
+    if (confirm2 != true) return;
+
+    // STEP 3: Verifikasi Teks
+    if (!mounted) return;
+    final expectedPhrase = 'HAPUS ${periodLabel.toUpperCase()}';
+    final TextEditingController verifyCtrl = TextEditingController();
+    bool canDelete = false;
+
+    final confirm3 = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          title: const Text('Verifikasi Terakhir', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Untuk mengonfirmasi, ketik kalimat di bawah ini:'),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                width: double.infinity,
+                decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade300)),
+                child: SelectableText(expectedPhrase, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blueGrey, letterSpacing: 1.1)),
+              ),
+              const SizedBox(height: 20),
+              TextField(
+                controller: verifyCtrl,
+                onChanged: (v) => setDialogState(() => canDelete = v.trim().toUpperCase() == expectedPhrase),
+                decoration: InputDecoration(
+                  hintText: 'Ketik di sini...',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Batal', style: TextStyle(color: Colors.grey))),
+            ElevatedButton(
+              onPressed: canDelete ? () => Navigator.pop(ctx, true) : null,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                disabledBackgroundColor: Colors.grey.shade300,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: const Text('Hapus Permanen'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (confirm3 != true) return;
+
+    // EXECUTION
+    AppDialog.showLoading(context, message: 'Menghapus data...');
+    try {
+      String url = '/api/admin/attendance?filter=$_periodFilter';
+      if (_periodFilter == 'month') {
+        url += '&month=$_selectedMonth&year=$_selectedYear';
+      } else if (_periodFilter == 'year') {
+        url += '&year=$_selectedYear';
+      } else if (_periodFilter == 'custom' && _selectedDateRange != null) {
+        final start = DateFormat('yyyy-MM-dd').format(_selectedDateRange!.start);
+        final end = DateFormat('yyyy-MM-dd').format(_selectedDateRange!.end);
+        url = '/api/admin/attendance?filter=custom&start_date=$start&end_date=$end';
+      }
+
+      final res = await ApiClient.delete(url);
+      Navigator.pop(context); // Close loading
+
+      if (res.success) {
+        AppDialog.showSuccess(context, 'Data riwayat periode $periodLabel telah dihapus secara permanen.');
+        _loadData();
+      } else {
+        AppDialog.showError(context, res.message ?? 'Gagal menghapus data');
+      }
+    } catch (e) {
+      Navigator.pop(context);
+      AppDialog.showError(context, 'Terjadi kesalahan sistem: $e');
     }
   }
 

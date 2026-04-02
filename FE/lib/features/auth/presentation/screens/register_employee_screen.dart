@@ -429,7 +429,7 @@ class _RegisterEmployeeScreenState extends State<RegisterEmployeeScreen> {
                       onPressed: _loading ? null : _submit,
                       child: _loading
                           ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Color(0xFF2563EB), strokeWidth: 2))
-                          : const Text('Sign Up', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                          : const Text('Daftar Sekarang', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                     ),
                   ),
                   const SizedBox(height: 40),

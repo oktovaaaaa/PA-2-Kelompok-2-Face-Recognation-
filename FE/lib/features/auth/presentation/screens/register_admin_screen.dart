@@ -441,7 +441,7 @@ class _RegisterAdminScreenState extends State<RegisterAdminScreen> {
                       onPressed: _loading ? null : _submit,
                       child: _loading
                           ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Color(0xFF2563EB), strokeWidth: 2))
-                          : Text(_currentStep == 0 ? 'Selanjutnya' : 'Sign Up', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                          : Text(_currentStep == 0 ? 'Selanjutnya' : 'Daftar Sekarang', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                     ),
                   ),
                   if (_currentStep == 1) ...[

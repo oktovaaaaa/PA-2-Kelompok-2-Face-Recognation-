@@ -3,7 +3,10 @@ import '../../../../../core/network/api_client.dart';
 import '../../../../../core/storage/session_storage.dart';
 import '../../../../../core/utils/currency_formatter.dart';
 import '../../../../../core/constants/app_constants.dart';
+import '../../../../../core/providers/notification_provider.dart';
+import '../../../../common/presentation/screens/notification_screen.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 import '../../../../common/widgets/app_dialog.dart';
 
 class EmployeeAttendanceTab extends StatefulWidget {
@@ -25,6 +28,9 @@ class _EmployeeAttendanceTabState extends State<EmployeeAttendanceTab> {
   void initState() {
     super.initState();
     _load();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<NotificationProvider>().fetchNotifications();
+    });
   }
 
   Future<void> _load() async {
@@ -57,7 +63,7 @@ class _EmployeeAttendanceTabState extends State<EmployeeAttendanceTab> {
       final res = await ApiClient.post('/api/employee/attendance/$action', {});
       if (!mounted) return;
       if (res.success) {
-        AppDialog.showSuccess(context, action == 'checkin' ? 'Check-in berhasil!' : 'Check-out berhasil!');
+        AppDialog.showSuccess(context, action == 'checkin' ? 'Absen Masuk berhasil!' : 'Absen Keluar berhasil!');
         _load();
       } else {
         AppDialog.showError(context, res.message ?? 'Gagal melakukan absensi');
@@ -106,13 +112,13 @@ class _EmployeeAttendanceTabState extends State<EmployeeAttendanceTab> {
 
     final position = (_profileData?['position_name'] ?? 'Karyawan').toString();
     final isDoneForDay = hasCheckedIn && hasCheckedOut;
+    final isHoliday = displayStatus == 'HOLIDAY';
+    final holidayName = _todayData?['holiday_name'] ?? 'Hari Libur';
 
     // Helper untuk cek jam operasional (Frontend sync)
-    bool isCheckInOpen() => displayStatus != 'NOT_STARTED' && displayStatus != 'EARLY_LEAVE';
+    bool isCheckInOpen() => !isHoliday && displayStatus != 'NOT_STARTED' && displayStatus != 'EARLY_LEAVE';
     bool isCheckOutOpen() {
-      if (settings == null) return false;
-      // Gunakan string comparison sederhana atau biarkan backend yang handle pesan errornya
-      // Di sini kita buat tombol aktif hanya jika sudah check-in dan belum check-out
+      if (isHoliday || settings == null) return false;
       return hasCheckedIn && !hasCheckedOut;
     }
 
@@ -167,28 +173,39 @@ class _EmployeeAttendanceTabState extends State<EmployeeAttendanceTab> {
                     ),
                   ),
                   const SizedBox(width: 12),
-                  Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      IconButton(
-                        onPressed: () {}, // Future action
-                        icon: const Icon(Icons.notifications_none_rounded, color: Colors.white, size: 28),
-                      ),
-                      Positioned(
-                        top: 8,
-                        right: 8,
-                        child: Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
-                          constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
-                          child: const Text(
-                            '1',
-                            style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
-                            textAlign: TextAlign.center,
+                  Consumer<NotificationProvider>(
+                    builder: (context, notifProvider, child) {
+                      final count = notifProvider.unreadCount;
+                      return Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          IconButton(
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (_) => const NotificationScreen()),
+                              );
+                            },
+                            icon: const Icon(Icons.notifications_none_rounded, color: Colors.white, size: 28),
                           ),
-                        ),
-                      ),
-                    ],
+                          if (count > 0)
+                            Positioned(
+                              top: 8,
+                              right: 8,
+                              child: Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                                constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                                child: Text(
+                                  count > 9 ? '9+' : count.toString(),
+                                  style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                            ),
+                        ],
+                      );
+                    },
                   ),
                   const SizedBox(width: 4),
                   Container(
@@ -296,6 +313,7 @@ class _EmployeeAttendanceTabState extends State<EmployeeAttendanceTab> {
                                   const SizedBox(height: 4),
                                   Text(
                                     () {
+                                      if (isHoliday) return 'HARI LIBUR ✨';
                                       if (isDoneForDay) return 'HADIR TEPAT WAKTU ✔️';
                                       if (displayStatus == 'LATE') return 'TERLAMBAT ⚠️';
                                       if (displayStatus == 'ABSENT') return 'ALPHA ❌';
@@ -314,6 +332,38 @@ class _EmployeeAttendanceTabState extends State<EmployeeAttendanceTab> {
                         ],
                       ),
                     ),
+
+                    if (isHoliday) ...[
+                      const SizedBox(height: 20),
+                      Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEFF6FF),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: const Color(0xFFBFDBFE)),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(color: const Color(0xFFDBEAFE), borderRadius: BorderRadius.circular(12)),
+                              child: const Icon(Icons.beach_access_rounded, color: Color(0xFF2563EB), size: 28),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(holidayName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF1E40AF))),
+                                  const SizedBox(height: 4),
+                                  const Text('Selamat beristirahat! Sistem absensi dinonaktifkan hari ini.', style: TextStyle(fontSize: 13, color: Color(0xFF1E40AF))),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 28),
   
                     // Action Buttons Grid-Style
@@ -322,14 +372,14 @@ class _EmployeeAttendanceTabState extends State<EmployeeAttendanceTab> {
                       children: [
                         _buildQuickAction(
                           icon: Icons.login_rounded,
-                          label: 'Check In',
+                          label: 'Masuk',
                           color: const Color(0xFF2E7D32),
                           disabled: hasCheckedIn || !isCheckInOpen(),
                           onTap: () => _doAction('checkin'),
                         ),
                         _buildQuickAction(
                           icon: Icons.logout_rounded,
-                          label: 'Check Out',
+                          label: 'Pulang',
                           color: const Color(0xFF1E3A8A),
                           disabled: !hasCheckedIn || hasCheckedOut, // Biarkan backend validasi jendela waktunya agar pesan error muncul
                           onTap: () => _doAction('checkout'),
@@ -392,7 +442,7 @@ class _EmployeeAttendanceTabState extends State<EmployeeAttendanceTab> {
                               if (hasCheckedIn) return displayStatus == 'LATE' ? 'Terlambat' : 'Hadir';
                               if (displayStatus == 'NOT_STARTED') return 'Belum Mulai';
                               if (displayStatus == 'ABSENT') return 'Alpha';
-                              return 'Ready';
+                              return 'Siap';
                             }(),
                             color: hasCheckedIn 
                                 ? (displayStatus == 'LATE' ? Colors.orange : const Color(0xFF2E7D32)) 
@@ -407,7 +457,7 @@ class _EmployeeAttendanceTabState extends State<EmployeeAttendanceTab> {
                             status: () {
                               if (hasCheckedOut) return 'Selesai';
                               if (displayStatus == 'EARLY_LEAVE') return 'Tanpa Absen';
-                              return hasCheckedIn ? 'Ready' : 'Wait';
+                              return hasCheckedIn ? 'Siap' : 'Tunggu';
                             }(),
                             color: hasCheckedOut 
                                 ? const Color(0xFF1E3A8A) 
@@ -418,7 +468,31 @@ class _EmployeeAttendanceTabState extends State<EmployeeAttendanceTab> {
                       ),
                     ),
   
-                    if (settings != null) ...[
+                    if (isHoliday) ...[
+                      const SizedBox(height: 24),
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.shade50,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: Colors.orange.shade100),
+                        ),
+                        child: const Row(
+                          children: [
+                            Icon(Icons.info_outline_rounded, color: Colors.orange, size: 18),
+                            SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                'Sesuai kebijakan perusahaan, hari ini ditetapkan sebagai hari libur. Silakan hubungi admin jika ada kekeliruan.',
+                                style: TextStyle(fontSize: 12, color: Colors.orange, height: 1.5),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+
+                    if (!isHoliday && settings != null) ...[
                       const SizedBox(height: 24),
                       Container(
                         padding: const EdgeInsets.all(16),

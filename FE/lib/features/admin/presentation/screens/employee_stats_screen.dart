@@ -10,11 +10,13 @@ import '../../../common/widgets/app_dialog.dart';
 class EmployeeStatsScreen extends StatefulWidget {
   final String userId;
   final String userName;
+  final String? photoUrl;
 
   const EmployeeStatsScreen({
     super.key,
     required this.userId,
     required this.userName,
+    this.photoUrl,
   });
 
   @override
@@ -69,6 +71,15 @@ class _EmployeeStatsScreenState extends State<EmployeeStatsScreen> {
     }
   }
 
+  String _getInitials(String name) {
+    if (name.trim().isEmpty) return '?';
+    final pts = name.trim().split(RegExp(r'\s+'));
+    if (pts.length >= 2) {
+      return (pts[0][0] + pts[1][0]).toUpperCase();
+    }
+    return pts[0][0].toUpperCase();
+  }
+
   @override
   Widget build(BuildContext context) {
     return AnnotatedRegion<SystemUiOverlayStyle>(
@@ -80,14 +91,17 @@ class _EmployeeStatsScreenState extends State<EmployeeStatsScreen> {
             // Header
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.only(top: 64, left: 24, right: 24, bottom: 24),
+              padding: const EdgeInsets.only(top: 64, left: 24, right: 24, bottom: 28),
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [Color(0xFF0F172A), Color(0xFF1E3A8A)],
+                  colors: [Color(0xFF0F172A), Color(0xFF1E3A8A), Color(0xFF2563EB)],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
-                borderRadius: BorderRadius.only(bottomLeft: Radius.circular(32), bottomRight: Radius.circular(32)),
+                borderRadius: BorderRadius.only(
+                  bottomLeft: Radius.circular(32),
+                  bottomRight: Radius.circular(32),
+                ),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -110,12 +124,24 @@ class _EmployeeStatsScreenState extends State<EmployeeStatsScreen> {
                   const SizedBox(height: 24),
                   Row(
                     children: [
-                      CircleAvatar(
-                        radius: 28,
-                        backgroundColor: Colors.white.withOpacity(0.15),
-                        child: Text(
-                          widget.userName.substring(0, 1).toUpperCase(),
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 24),
+                      Container(
+                        padding: const EdgeInsets.all(2),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white.withOpacity(0.2), width: 2),
+                        ),
+                        child: CircleAvatar(
+                          radius: 28,
+                          backgroundColor: Colors.white.withOpacity(0.15),
+                          backgroundImage: (widget.photoUrl != null && widget.photoUrl!.isNotEmpty)
+                              ? NetworkImage('http://10.0.2.2:8080${widget.photoUrl}')
+                              : null,
+                          child: (widget.photoUrl == null || widget.photoUrl!.isEmpty)
+                              ? Text(
+                                  _getInitials(widget.userName),
+                                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 22),
+                                )
+                              : null,
                         ),
                       ),
                       const SizedBox(width: 16),

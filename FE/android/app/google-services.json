@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "732839721535",
+    "project_id": "facerecognition-kel2",
+    "storage_bucket": "facerecognition-kel2.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:732839721535:android:2eefc171ffa371b6dc168a",
+        "android_client_info": {
+          "package_name": "com.pifor.absen"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAA_HCaVgYIlAhVnVZ4-ocGOwdYbQm00FE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

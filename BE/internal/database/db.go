@@ -52,5 +52,8 @@ func AutoMigrate() {
 		&models.AttendanceSettings{},
 		&models.LeaveRequest{},
 		&models.Notification{},
+		&models.SalaryPayment{},
+		&models.Holiday{},
+		&models.Penalty{},
 	)
 }

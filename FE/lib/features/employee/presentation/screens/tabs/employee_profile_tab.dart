@@ -237,6 +237,76 @@ class _EmployeeProfileTabState extends State<EmployeeProfileTab> {
     );
   }
 
+  void _editBankInfo() {
+    final bankNameCtrl = TextEditingController(text: _v('bank_name'));
+    final accountNumberCtrl = TextEditingController(text: _v('bank_account_number'));
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+        padding: EdgeInsets.only(left: 24, right: 24, top: 24, bottom: MediaQuery.of(ctx).viewInsets.bottom + 24),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Edit Informasi Bank', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: Color(0xFF0F172A))),
+                  IconButton(onPressed: () => Navigator.pop(ctx), icon: const Icon(Icons.close_rounded)),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text('Pastikan nomor rekening sudah benar untuk kelancaran penggajian.', style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+              const SizedBox(height: 24),
+              AppTextField(controller: bankNameCtrl, label: 'Nama Bank', prefixIcon: Icons.account_balance_rounded),
+              const SizedBox(height: 16),
+              AppTextField(controller: accountNumberCtrl, label: 'Nomor Rekening', prefixIcon: Icons.numbers_rounded, keyboardType: TextInputType.number),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF10B981),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    elevation: 0,
+                  ),
+                  onPressed: () async {
+                    if (bankNameCtrl.text.isEmpty || accountNumberCtrl.text.isEmpty) {
+                      AppDialog.showError(context, 'Semua data bank harus diisi');
+                      return;
+                    }
+
+                    Navigator.pop(ctx);
+                    final res = await ApiClient.put('/api/employee/bank-info', {
+                      'bank_name': bankNameCtrl.text.trim(),
+                      'bank_account_number': accountNumberCtrl.text.trim(),
+                    });
+                    
+                    if (!mounted) return;
+                    if (res.success) {
+                      AppDialog.showSuccess(context, 'Informasi Bank Berhasil Diperbarui');
+                      _load();
+                    } else {
+                      AppDialog.showError(context, res.message ?? 'Gagal memperbarui informasi bank');
+                    }
+                  },
+                  child: const Text('Simpan Rekening', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildField(TextEditingController ctrl, String label, IconData icon,
       {TextInputType? keyboardType, int maxLines = 1, bool readOnly = false, VoidCallback? onTap}) {
     return Column(
@@ -418,7 +488,7 @@ class _EmployeeProfileTabState extends State<EmployeeProfileTab> {
                     title: 'Informasi Gaji & Bank',
                     icon: Icons.account_balance_rounded,
                     color: const Color(0xFF10B981),
-                    onEdit: _editProfile,
+                    onEdit: _editBankInfo,
                     rows: [
                       _infoRow('Gaji Pokok', 'Rp ${salary.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.')}'),
                       _infoRow('Bank', _v('bank_name')),

@@ -70,7 +70,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final labels = ['Beranda', 'Perizinan', 'Jabatan', 'Karyawan', 'Profil'];
     final icons = [
       Icons.home_rounded,
       Icons.assignment_rounded,
@@ -95,7 +94,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           BottomNavItem(icon: Icons.assignment_rounded, label: 'Perizinan'),
           BottomNavItem(icon: Icons.payments_rounded, label: 'Gaji'),
           BottomNavItem(icon: Icons.people_rounded, label: 'Karyawan'),
-          BottomNavItem(icon: Icons.person_rounded, label: 'Profil'),
+          BottomNavItem(icon: Icons.settings_rounded, label: 'Pengaturan'),
         ],
       ),
     );

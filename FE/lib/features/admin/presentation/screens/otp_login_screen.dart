@@ -7,6 +7,7 @@ import 'splash_gate.dart';
 import '../../../common/widgets/wavy_background.dart';
 import '../../../common/widgets/app_dialog.dart';
 import '../../../auth/data/auth_repository.dart';
+import '../../../../core/services/notification_service.dart';
 
 class OtpLoginScreen extends StatefulWidget {
   final String email;
@@ -67,6 +68,9 @@ class _OtpLoginScreenState extends State<OtpLoginScreen> {
       );
 
       if (!mounted) return;
+      
+      // Sync FCM token setelah login berhasil
+      NotificationService.syncToken();
       
       // Delegasikan ke SplashGate agar routing handling menjadi seragam (admin maupun employee)
       Navigator.pushAndRemoveUntil(

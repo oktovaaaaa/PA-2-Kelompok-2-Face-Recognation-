@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../common/widgets/app_dialog.dart';
 import '../../../../core/constants/app_constants.dart';
+import '../../../../core/utils/currency_formatter.dart';
 
 class AdminPayrollScreen extends StatefulWidget {
   final bool isTab;
@@ -63,8 +64,14 @@ class _AdminPayrollScreenState extends State<AdminPayrollScreen> {
 
   void _showPaymentDialog(Map<String, dynamic> salary) async {
     final user = salary['user'] as Map<String, dynamic>;
+    final total = (salary['total_salary'] as num).toDouble();
+    final alreadyPaid = (salary['paid_amount'] as num? ?? 0).toDouble();
+    final balance = total - alreadyPaid;
+    
     File? proofImage;
     final picker = ImagePicker();
+    final amountCtrl = TextEditingController(text: CurrencyInputFormatter.formatNumber(balance.toInt()));
+    bool isFullPayment = true;
 
     await showModalBottomSheet(
       context: context,
@@ -72,7 +79,7 @@ class _AdminPayrollScreenState extends State<AdminPayrollScreen> {
       backgroundColor: Colors.transparent,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setModalState) => Container(
-          padding: const EdgeInsets.all(24),
+          padding: EdgeInsets.only(left: 24, right: 24, top: 24, bottom: MediaQuery.of(context).viewInsets.bottom + 24),
           decoration: const BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.only(topLeft: Radius.circular(32), topRight: Radius.circular(32)),
@@ -85,26 +92,87 @@ class _AdminPayrollScreenState extends State<AdminPayrollScreen> {
               const SizedBox(height: 24),
               const Text('Konfirmasi Pembayaran', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
               const SizedBox(height: 8),
-              Text('Anda akan membayar gaji untuk ${user['name']}', style: TextStyle(color: Colors.grey.shade600)),
+              Text('Gaji untuk ${user['name']}', style: TextStyle(color: Colors.grey.shade600)),
               const Divider(height: 32),
               
+              // Payment Summary
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(color: Colors.grey.shade50, borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.grey.shade200)),
+                child: Column(
+                  children: [
+                    _summaryRow('Total Gaji', _formatCurrency(total)),
+                    const SizedBox(height: 8),
+                    _summaryRow('Sudah Dibayar', _formatCurrency(alreadyPaid), color: Colors.green),
+                    const Divider(height: 24),
+                    _summaryRow('Sisa Saldo', _formatCurrency(balance), isBold: true, color: const Color(0xFF1E3A8A)),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+
               // Bank Info
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(16)),
                 child: Row(
                   children: [
-                    const Icon(Icons.account_balance_rounded, color: Color(0xFF2563EB)),
+                    const Icon(Icons.account_balance_rounded, color: Color(0xFF2563EB), size: 20),
                     const SizedBox(width: 16),
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(user['bank_name'] ?? 'Bank Belum Diatur', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                        Text(user['bank_account_number'] ?? '-', style: const TextStyle(color: Color(0xFF1E3A8A), fontSize: 15, letterSpacing: 1.2)),
+                        Text(user['bank_account_number'] ?? '-', style: const TextStyle(color: Color(0xFF1E3A8A), fontSize: 14, letterSpacing: 1.2)),
                       ],
                     ),
                   ],
                 ),
+              ),
+              const SizedBox(height: 24),
+
+              // Amount Input
+              const Text('Nominal yang Dibayar', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: amountCtrl,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                        CurrencyInputFormatter(),
+                      ],
+                      onChanged: (v) {
+                        final unformatted = CurrencyInputFormatter.unformat(v);
+                        setModalState(() => isFullPayment = unformatted >= balance);
+                      },
+                      decoration: InputDecoration(
+                        prefixText: 'Rp ',
+                        hintText: 'Masukkan nominal',
+                        filled: true,
+                        fillColor: Colors.grey.shade50,
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade200)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  TextButton(
+                    onPressed: () {
+                      setModalState(() {
+                        amountCtrl.text = CurrencyInputFormatter.formatNumber(balance.toInt());
+                        isFullPayment = true;
+                      });
+                    },
+                    style: TextButton.styleFrom(
+                      backgroundColor: const Color(0xFF1E3A8A).withOpacity(0.1),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: const Text('Bayar Penuh', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1E3A8A))),
+                  ),
+                ],
               ),
               const SizedBox(height: 24),
               
@@ -112,14 +180,14 @@ class _AdminPayrollScreenState extends State<AdminPayrollScreen> {
               const SizedBox(height: 12),
               GestureDetector(
                 onTap: () async {
-                  final picked = await picker.pickImage(source: ImageSource.gallery);
+                  final picked = await picker.pickImage(source: ImageSource.gallery, imageQuality: 50);
                   if (picked != null) {
                     setModalState(() => proofImage = File(picked.path));
                   }
                 },
                 child: Container(
                   width: double.infinity,
-                  height: 120,
+                  height: 100,
                   decoration: BoxDecoration(
                     color: Colors.grey.shade50,
                     borderRadius: BorderRadius.circular(16),
@@ -130,7 +198,7 @@ class _AdminPayrollScreenState extends State<AdminPayrollScreen> {
                       : Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.add_a_photo_rounded, color: Colors.grey.shade400),
+                            Icon(Icons.add_a_photo_rounded, color: Colors.grey.shade400, size: 24),
                             const SizedBox(height: 4),
                             Text('Unggah Bukti', style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
                           ],
@@ -151,14 +219,26 @@ class _AdminPayrollScreenState extends State<AdminPayrollScreen> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: ElevatedButton(
-                      onPressed: () => Navigator.pop(context, true),
+                      onPressed: () {
+                        final unformatted = CurrencyInputFormatter.unformat(amountCtrl.text);
+                        final val = unformatted.toDouble();
+                        if (val <= 0) {
+                          AppDialog.showError(context, 'Nominal harus lebih dari 0');
+                          return;
+                        }
+                        if (val > balance) {
+                           AppDialog.showError(context, 'Nominal melebihi sisa saldo');
+                           return;
+                        }
+                        Navigator.pop(context, unformatted.toString());
+                      },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF2563EB),
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                       ),
-                      child: const Text('Konfirmasi Bayar', style: TextStyle(fontWeight: FontWeight.bold)),
+                      child: Text(isFullPayment ? 'Konfirmasi Pelunasan' : 'Konfirmasi Cicilan', style: const TextStyle(fontWeight: FontWeight.bold)),
                     ),
                   ),
                 ],
@@ -168,26 +248,41 @@ class _AdminPayrollScreenState extends State<AdminPayrollScreen> {
           ),
         ),
       ),
-    ).then((confirmed) async {
-       if (confirmed == true) {
-         _processPayment(salary['id'], proofImage);
+    ).then((amount) async {
+       if (amount != null && amount is String) {
+         _processPayment(salary['id'], amount, proofImage);
        }
     });
   }
 
-  Future<void> _processPayment(String id, File? proof) async {
+  Widget _summaryRow(String label, String value, {bool isBold = false, Color? color}) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 13, color: Color(0xFF64748B))),
+        Text(value, style: TextStyle(
+          fontSize: isBold ? 16 : 14, 
+          fontWeight: isBold ? FontWeight.bold : FontWeight.w600,
+          color: color ?? const Color(0xFF0F172A),
+        )),
+      ],
+    );
+  }
+
+  Future<void> _processPayment(String id, String amount, File? proof) async {
     AppDialog.showLoading(context, message: 'Sedang memproses...');
     try {
       final res = await ApiClient.postMultipart(
         '/api/admin/payroll/$id/pay',
         files: proof != null ? {'proof': proof} : null,
+        fields: {'amount': amount},
       );
       
       if (!mounted) return;
       Navigator.pop(context); // Close loading
 
       if (res.success) {
-        AppDialog.showSuccess(context, 'Pembayaran berhasil dikonfirmasi');
+        AppDialog.showSuccess(context, 'Pembayaran berhasil dicatat');
         _loadSalaries();
       } else {
         AppDialog.showError(context, res.message ?? 'Gagal memproses pembayaran');
@@ -252,7 +347,7 @@ class _AdminPayrollScreenState extends State<AdminPayrollScreen> {
                          ),
                          const SizedBox(width: 8),
                          _filterChip(
-                           label: _selectedPositionId == null ? 'Semua Jabatan' : _getPositionName(_selectedPositionId!),
+                           label: _selectedPositionId == null ? 'Semua Gaji' : _getPositionName(_selectedPositionId!),
                            icon: Icons.work_outline_rounded,
                            onTap: _showPositionPicker,
                          ),
@@ -308,8 +403,12 @@ class _AdminPayrollScreenState extends State<AdminPayrollScreen> {
                               final s = _salaries[i] as Map<String, dynamic>;
                               final user = s['user'] as Map<String, dynamic>;
                               final pos = user['position'] as Map<String, dynamic>?;
-                              final isPaid = s['status'] == 'PAID';
+                              final status = s['status'];
+                              final isPaid = status == 'PAID';
+                              final isPartial = status == 'PARTIAL';
+                              
                               final total = (s['total_salary'] as num).toDouble();
+                              final paid = (s['paid_amount'] as num? ?? 0).toDouble();
 
                               return Container(
                                 decoration: BoxDecoration(
@@ -348,12 +447,15 @@ class _AdminPayrollScreenState extends State<AdminPayrollScreen> {
                                           Container(
                                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                             decoration: BoxDecoration(
-                                              color: (isPaid ? Colors.green : Colors.orange).withOpacity(0.1),
+                                              color: (isPaid ? Colors.green : (isPartial ? Colors.blue : Colors.orange)).withOpacity(0.1),
                                               borderRadius: BorderRadius.circular(20),
                                             ),
                                             child: Text(
-                                              isPaid ? 'Lunas' : 'Pending',
-                                              style: TextStyle(color: isPaid ? Colors.green : Colors.orange, fontWeight: FontWeight.bold, fontSize: 11),
+                                              isPaid ? 'Lunas' : (isPartial ? 'Dicicil' : 'Pending'),
+                                              style: TextStyle(
+                                                color: isPaid ? Colors.green : (isPartial ? Colors.blue : Colors.orange), 
+                                                fontWeight: FontWeight.bold, fontSize: 11
+                                              ),
                                             ),
                                           ),
                                         ],
@@ -365,9 +467,14 @@ class _AdminPayrollScreenState extends State<AdminPayrollScreen> {
                                           Column(
                                             crossAxisAlignment: CrossAxisAlignment.start,
                                             children: [
-                                              Text('Total Gaji', style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+                                              Row(
+                                                children: [
+                                                  Text(_formatCurrency(paid), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: isPaid ? Colors.green : (isPartial ? Colors.blue : const Color(0xFF0F172A)))),
+                                                  Text(' / ${_formatCurrency(total)}', style: TextStyle(color: Colors.grey.shade400, fontSize: 14)),
+                                                ],
+                                              ),
                                               const SizedBox(height: 2),
-                                              Text(_formatCurrency(total), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF0F172A))),
+                                              Text(isPaid ? 'Sudah Lunas' : (isPartial ? 'Sisa: ${_formatCurrency(total - paid)}' : 'Total Gaji'), style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
                                             ],
                                           ),
                                           if (!isPaid)
@@ -379,7 +486,7 @@ class _AdminPayrollScreenState extends State<AdminPayrollScreen> {
                                                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                                               ),
-                                              child: const Text('Bayar', style: TextStyle(fontWeight: FontWeight.bold)),
+                                              child: Text(isPartial ? 'Cicil Lagi' : 'Bayar', style: const TextStyle(fontWeight: FontWeight.bold)),
                                             )
                                           else
                                             const Icon(Icons.check_circle_rounded, color: Colors.green, size: 32),
@@ -466,10 +573,10 @@ class _AdminPayrollScreenState extends State<AdminPayrollScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('Pilih Jabatan', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+            const Text('Pilih Gaji', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
             const SizedBox(height: 16),
             ListTile(
-              title: const Text('Semua Jabatan'),
+              title: const Text('Semua Gaji'),
               onTap: () { setState(() => _selectedPositionId = null); Navigator.pop(ctx); _loadSalaries(); },
             ),
             ...(_positions.map((p) => ListTile(

@@ -5,7 +5,10 @@ package handlers
 import (
 	"employee-system/internal/database"
 	"employee-system/internal/models"
+	"employee-system/internal/services"
 	"employee-system/internal/utils"
+	"fmt"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -136,5 +139,39 @@ func AssignPosition(c *gin.Context) {
 		employee.PositionID = &body.PositionID
 	}
 	database.DB.Save(&employee)
+
+	// Kirim Notifikasi
+	go func() {
+		title := "Perubahan Jabatan"
+		bodyText := "Jabatan Anda telah diperbarui oleh Admin."
+		if body.PositionID != "" {
+			var pos models.Position
+			if err := database.DB.Where("id = ?", body.PositionID).First(&pos).Error; err == nil {
+				bodyText = fmt.Sprintf("Jabatan Anda telah diperbarui menjadi %s.", pos.Name)
+			}
+		} else {
+			bodyText = "Jabatan Anda telah dilepas oleh Admin."
+		}
+
+		// Simpan Notifikasi ke DB
+		notif := models.Notification{
+			ID:        uuid.New().String(),
+			UserID:    employee.ID,
+			CompanyID: employee.CompanyID,
+			Title:     title,
+			Body:      bodyText,
+			Type:      "POSITION_UPDATE",
+			RefID:     body.PositionID,
+			IsRead:    false,
+			CreatedAt: time.Now(),
+		}
+		database.DB.Create(&notif)
+
+		// Kirim Push Notification jika ada DeviceID
+		if employee.DeviceID != "" {
+			services.SendPushNotification(employee.ID, title, bodyText)
+		}
+	}()
+
 	utils.Success(c, "Jabatan karyawan berhasil diperbarui", nil)
 }

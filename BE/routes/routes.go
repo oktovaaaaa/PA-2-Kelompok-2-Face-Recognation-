@@ -58,6 +58,9 @@ func SetupRouter() *gin.Engine {
 		protected.GET("/notifications", handlers.GetNotifications)
 		protected.PUT("/notifications/:id/read", handlers.MarkNotificationRead)
 		protected.PUT("/notifications/read-all", handlers.MarkAllNotificationsRead)
+
+		// Denda Pelanggaran (Melihat denda sendiri)
+		protected.GET("/penalties", handlers.GetPenalties)
 	}
 
 	// Protected Admin Routes
@@ -95,6 +98,7 @@ func SetupRouter() *gin.Engine {
 
 		// Riwayat absensi semua karyawan
 		admin.GET("/attendance", handlers.AdminGetAttendanceHistory)
+		admin.DELETE("/attendance", handlers.AdminBulkDeleteAttendance)
 		admin.GET("/dashboard/summary", handlers.AdminGetDashboardSummary)
 
 		// Pengaturan absensi
@@ -104,6 +108,18 @@ func SetupRouter() *gin.Engine {
 		// Penggajian (Payroll)
 		admin.GET("/payroll", handlers.AdminGetSalaries)
 		admin.POST("/payroll/:id/pay", handlers.AdminPaySalary)
+
+		// Hari Libur
+		admin.POST("/holidays", handlers.CreateHoliday)
+		admin.GET("/holidays", handlers.GetHolidays)
+		admin.PUT("/holidays/:id", handlers.UpdateHoliday)
+		admin.DELETE("/holidays/:id", handlers.DeleteHoliday)
+		admin.DELETE("/holidays/past", handlers.DeletePastHolidays)
+
+		// Denda Pelanggaran (Manual Penalty)
+		admin.POST("/penalties", handlers.CreatePenalty)
+		admin.GET("/penalties", handlers.GetPenalties)
+		admin.DELETE("/penalties/:id", handlers.DeletePenalty)
 	}
 
 	// Protected Employee Routes
@@ -121,12 +137,13 @@ func SetupRouter() *gin.Engine {
 		employee.GET("/leaves", handlers.EmployeeGetLeaves)
 		employee.PUT("/leaves/:id", handlers.EmployeeUpdateLeave)
 		employee.DELETE("/leaves/:id", handlers.EmployeeDeleteLeave)
+		employee.POST("/leaves/bulk-delete", handlers.EmployeeBulkDeleteLeaves)
 
 		// Penggajian (Payroll)
+		employee.GET("/salaries/years", handlers.GetSalaryYears)
 		employee.GET("/salaries", handlers.GetMySalaries)
 		employee.PUT("/bank-info", handlers.UpdateBankInfo)
 	}
 
 	return r
 }
-

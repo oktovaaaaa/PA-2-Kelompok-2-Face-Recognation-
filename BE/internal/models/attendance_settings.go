@@ -21,5 +21,7 @@ type AttendanceSettings struct {
 	LatePenalty      float64 `json:"late_penalty"`       // Potongan gaji per hari terlambat (Rp) - Default
 	LatePenaltyTiers string  `json:"late_penalty_tiers"` // JSON array: [{"hours": 1, "penalty": 50000}, ...]
 
+	WorkDays         string  `json:"work_days" gorm:"default:'Monday,Tuesday,Wednesday,Thursday,Friday'"`
+
 	UpdatedAt time.Time `json:"updated_at"`
 }

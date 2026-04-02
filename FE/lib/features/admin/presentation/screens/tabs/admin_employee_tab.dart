@@ -21,6 +21,8 @@ class _AdminEmployeeTabState extends State<AdminEmployeeTab> with SingleTickerPr
   List<dynamic> _positions = [];
   bool _loading = false;
   String _statusFilter = 'ACTIVE';
+  String _searchQuery = '';
+  final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
@@ -36,6 +38,7 @@ class _AdminEmployeeTabState extends State<AdminEmployeeTab> with SingleTickerPr
   @override
   void dispose() {
     _tabController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -337,7 +340,7 @@ class _AdminEmployeeTabState extends State<AdminEmployeeTab> with SingleTickerPr
             const Divider(height: 24),
             _actionButton(Icons.analytics_rounded, 'Lihat Statistik Kehadiran', Colors.deepPurple, () { 
               Navigator.pop(ctx); 
-              Navigator.push(context, MaterialPageRoute(builder: (_) => EmployeeStatsScreen(userId: emp['id'], userName: emp['name'])));
+              Navigator.push(context, MaterialPageRoute(builder: (_) => EmployeeStatsScreen(userId: emp['id'], userName: emp['name'], photoUrl: emp['photo_url'])));
             }),
             const SizedBox(height: 12),
             if (isActive) ...[
@@ -445,6 +448,28 @@ class _AdminEmployeeTabState extends State<AdminEmployeeTab> with SingleTickerPr
               const SizedBox(height: 6),
               Text('Kelola data dan status semua karyawan', style: TextStyle(color: Colors.white.withOpacity(0.75), fontSize: 13)),
               const SizedBox(height: 20),
+              // Search Bar
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                height: 48,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.white.withOpacity(0.1)),
+                ),
+                child: TextField(
+                  controller: _searchController,
+                  onChanged: (v) => setState(() => _searchQuery = v),
+                  style: const TextStyle(color: Colors.white, fontSize: 13),
+                  decoration: const InputDecoration(
+                    icon: Icon(Icons.search, color: Colors.white70, size: 20),
+                    hintText: 'Cari nama karyawan...',
+                    hintStyle: TextStyle(color: Colors.white54, fontSize: 13),
+                    border: InputBorder.none,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
               TabBar(
                 controller: _tabController,
                 labelColor: Colors.white,
@@ -482,10 +507,21 @@ class _AdminEmployeeTabState extends State<AdminEmployeeTab> with SingleTickerPr
                       onRefresh: _loadData,
                       child: ListView.separated(
                         padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
-                        itemCount: _employees.length,
+                        itemCount: _employees.where((e) {
+                          final name = (e['name'] ?? '').toString().toLowerCase();
+                          final email = (e['email'] ?? '').toString().toLowerCase();
+                          final q = _searchQuery.toLowerCase();
+                          return name.contains(q) || email.contains(q);
+                        }).length,
                         separatorBuilder: (_, __) => const SizedBox(height: 12),
                         itemBuilder: (_, i) {
-                          final e = _employees[i] as Map<String, dynamic>;
+                          final filteredList = _employees.where((e) {
+                            final name = (e['name'] ?? '').toString().toLowerCase();
+                            final email = (e['email'] ?? '').toString().toLowerCase();
+                            final q = _searchQuery.toLowerCase();
+                            return name.contains(q) || email.contains(q);
+                          }).toList();
+                          final e = filteredList[i] as Map<String, dynamic>;
                           return GestureDetector(
                             onTap: () => _showDetail(e),
                             child: Container(

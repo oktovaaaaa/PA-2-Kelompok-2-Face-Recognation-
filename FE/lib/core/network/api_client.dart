@@ -129,13 +129,17 @@ class ApiClient {
   }
 
   /// Multipart POST untuk endpoint khusus (misal: bayar gaji)
-  static Future<ApiResponse> postMultipart(String path, {Map<String, File>? files}) async {
+  static Future<ApiResponse> postMultipart(String path, {Map<String, File>? files, Map<String, String>? fields}) async {
     final token = await SessionStorage.getToken();
     final uri = _buildUri(path);
     final request = http.MultipartRequest('POST', uri);
 
     if (token != null && token.isNotEmpty) {
       request.headers['Authorization'] = 'Bearer $token';
+    }
+
+    if (fields != null) {
+      request.fields.addAll(fields);
     }
 
     if (files != null) {

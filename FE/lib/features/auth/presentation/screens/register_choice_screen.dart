@@ -30,7 +30,7 @@ class RegisterChoiceScreen extends StatelessWidget {
             ),
             const SizedBox(height: 32),
             const Text(
-              'Get Started',
+              'Mari Bergabung',
               style: TextStyle(
                 fontSize: 36,
                 fontWeight: FontWeight.bold,
@@ -94,7 +94,7 @@ class RegisterChoiceScreen extends StatelessWidget {
                       GestureDetector(
                         onTap: () => Navigator.pop(context),
                         child: const Text(
-                          'Sign In',
+                          'Masuk',
                           style: TextStyle(color: Color(0xFF2563EB), fontWeight: FontWeight.bold, fontSize: 14),
                         ),
                       ),

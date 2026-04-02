@@ -4,14 +4,18 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"time"
 
-	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"employee-system/internal/database"
 	"employee-system/internal/models"
+	"employee-system/internal/services"
 	"employee-system/internal/utils"
+
+	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 type LateTier struct {
@@ -19,27 +23,56 @@ type LateTier struct {
 	Penalty float64 `json:"penalty"`
 }
 
-// GetMySalaries - Employee view (Only shows past months)
+// GetMySalaries - Employee view (Only shows past months since joining)
 func GetMySalaries(c *gin.Context) {
 	userCtx, _ := c.Get("user")
 	user := userCtx.(models.User)
 	userID := user.ID
-	
-	var salaries []models.Salary
 
-	// Pastikan gaji bulan sebelumnya sudah terhitung
+	yearStr := c.Query("year")
+	monthStr := c.Query("month")
+	if yearStr == "" {
+		yearStr = strconv.Itoa(time.Now().Year())
+	}
+	
 	ensureSalariesGenerated(userID)
 
-	now := time.Now()
-	currentMonth := int(now.Month())
-	currentYear := now.Year()
+	var salaries []models.Salary
+	query := database.DB.Preload("User").Preload("User.Position").Preload("Payments").
+		Joins("JOIN users ON users.id = salaries.user_id").
+		Where("salaries.user_id = ? AND salaries.year = ?", userID, yearStr)
 
-	// Filter: Hanya tampilkan bulan yang sudah lewat (year < current OR (year == current AND month < current))
-	database.DB.Where("user_id = ? AND (year < ? OR (year = ? AND month < ?))", 
-		userID, currentYear, currentYear, currentMonth).
-		Order("year desc, month desc").Find(&salaries)
+	if monthStr != "" && monthStr != "0" {
+		query = query.Where("salaries.month = ?", monthStr)
+	}
+
+	if err := query.Order("salaries.month DESC").Find(&salaries).Error; err != nil {
+		utils.Error(c, "Gagal mengambil riwayat gaji")
+		return
+	}
 
 	utils.Success(c, "Berhasil mengambil riwayat gaji", salaries)
+}
+
+// GetSalaryYears - Get list of unique years that have salary data for the current user
+func GetSalaryYears(c *gin.Context) {
+	userCtx, _ := c.Get("user")
+	user := userCtx.(models.User)
+	userID := user.ID
+
+	var years []int
+	err := database.DB.Model(&models.Salary{}).
+		Where("user_id = ?", userID).
+		Distinct("year").
+		Order("year DESC").
+		Pluck("year", &years).Error
+
+	if err != nil {
+		utils.Error(c, "Gagal mengambil daftar tahun")
+		return
+	}
+
+	utils.Success(c, "Berhasil mengambil daftar tahun", years)
 }
 
 // AdminGetSalaries - Admin view with filters
@@ -49,20 +82,29 @@ func AdminGetSalaries(c *gin.Context) {
 	positionID := c.Query("position_id")
 	search := c.Query("search")
 
-	// Proactive Generation: Pastikan semua karyawan yang SUDAH BERGABUNG punya record gaji untuk periode ini
+	// Proactive Generation & Cleanup: Pastikan data akurat sesuai tanggal bergabung
 	if month > 0 && year > 0 {
 		var employees []models.User
-		// Kita batasi hanya karyawan yang dibuat SEBELUM atau PADA bulan yang diminta
-		lastDayOfMonth := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.Local).AddDate(0, 1, 0)
-		database.DB.Where("role = ? AND created_at < ?", "EMPLOYEE", lastDayOfMonth).Find(&employees)
+		database.DB.Where("role = ?", "EMPLOYEE").Find(&employees)
+
+		targetMonth := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.Local)
+
 		for _, emp := range employees {
-			// Kita panggil generateSalary untuk memastikan data terbaru (termasuk denda) tercatat
+			joinMonth := time.Date(emp.CreatedAt.Year(), emp.CreatedAt.Month(), 1, 0, 0, 0, 0, time.Local)
+
+			if targetMonth.Before(joinMonth) {
+				// Hapus data sampah jika ada (Pembersihan Database)
+				database.DB.Where("user_id = ? AND month = ? AND year = ?", emp.ID, month, year).Delete(&models.Salary{})
+				continue
+			}
+
+			// Generate/Update data valid
 			generateSalary(emp.ID, month, year)
 		}
 	}
 
 	var salaries []models.Salary
-	query := database.DB.Preload("User").Preload("User.Position").Joins("JOIN users ON users.id = salaries.user_id")
+	query := database.DB.Preload("User").Preload("User.Position").Preload("Payments").Joins("JOIN users ON users.id = salaries.user_id")
 
 	if month > 0 && year > 0 {
 		periodEnd := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.Local).AddDate(0, 1, 0)
@@ -84,10 +126,10 @@ func AdminGetSalaries(c *gin.Context) {
 	if search != "" {
 		userSubQuery = userSubQuery.Where("name LIKE ?", "%"+search+"%")
 	}
-	
+
 	var userIDs []string
 	userSubQuery.Pluck("id", &userIDs)
-	
+
 	if len(userIDs) > 0 || (positionID == "" && search == "") {
 		if positionID != "" || search != "" {
 			query = query.Where("user_id IN ?", userIDs)
@@ -100,19 +142,50 @@ func AdminGetSalaries(c *gin.Context) {
 	utils.Success(c, "Berhasil mengambil data payroll", salaries)
 }
 
-// AdminPaySalary - Process payment
+// AdminPaySalary - Process payment (supports installments)
 func AdminPaySalary(c *gin.Context) {
 	salaryID := c.Param("id")
-	
+	amountStr := c.PostForm("amount")
+
 	var salary models.Salary
 	if err := database.DB.First(&salary, "id = ?", salaryID).Error; err != nil {
 		utils.Error(c, "Data gaji tidak ditemukan")
-		return;
+		return
+	}
+
+	// Force recalculate if total salary is 0 (prevent zero-amount payment bug)
+	if salary.TotalSalary <= 0 {
+		generateSalary(salary.UserID, salary.Month, salary.Year)
+		database.DB.First(&salary, "id = ?", salaryID) // reload
+	}
+
+	if salary.TotalSalary <= 0 {
+		utils.Error(c, "Gaji belum terkonfigurasi (Total Rp 0). Harap pastikan Jabatan & Gaji Pokok sudah benar.")
+		return
 	}
 
 	if salary.Status == "PAID" {
-		utils.Error(c, "Gaji ini sudah dibayar sebelumnya")
-		return;
+		utils.Error(c, "Gaji ini sudah lunas")
+		return
+	}
+
+	// Calculate remaining balance
+	balance := salary.TotalSalary - salary.PaidAmount
+
+	var payAmount float64
+	if amountStr == "" {
+		payAmount = balance // Pay Full if amount not specified
+	} else {
+		var err error
+		payAmount, err = strconv.ParseFloat(amountStr, 64)
+		if err != nil || payAmount <= 0 {
+			utils.Error(c, "Nominal pembayaran tidak valid")
+			return
+		}
+		if payAmount > balance {
+			utils.Error(c, "Nominal melebihi sisa saldo (Sisa: Rp "+strconv.FormatFloat(balance, 'f', 0, 64)+")")
+			return
+		}
 	}
 
 	// Handle optional payment proof photo
@@ -128,13 +201,68 @@ func AdminPaySalary(c *gin.Context) {
 	}
 
 	now := time.Now()
-	salary.Status = "PAID"
-	salary.PaymentProof = photoPath
-	salary.PaidAt = &now
 
-	database.DB.Save(&salary)
+	// Start transaction for atomic payment recording
+	err = database.DB.Transaction(func(tx *gorm.DB) error {
+		// 1. Create individual payment record
+		payment := models.SalaryPayment{
+			ID:       uuid.New().String(),
+			SalaryID: salaryID,
+			Amount:   payAmount,
+			Proof:    photoPath,
+			PaidAt:   now,
+		}
+		if err := tx.Create(&payment).Error; err != nil {
+			return err
+		}
 
-	utils.Success(c, "Gaji berhasil ditandai sebagai dibayar", salary)
+		// 2. Recalculate total paid amount from all payments for this salary
+		var totalPaid float64
+		if err := tx.Model(&models.SalaryPayment{}).Where("salary_id = ?", salaryID).Select("sum(amount)").Scan(&totalPaid).Error; err != nil {
+			return err
+		}
+
+		// 3. Update main salary record status and total
+		status := "PARTIAL"
+		if totalPaid >= salary.TotalSalary {
+			status = "PAID"
+		} else if totalPaid > 0 {
+			status = "PARTIAL"
+		} else {
+			status = "PENDING"
+		}
+
+		updates := map[string]interface{}{
+			"paid_amount":   totalPaid,
+			"payment_proof": photoPath,
+			"paid_at":       &now,
+			"status":        status,
+		}
+
+		if err := tx.Model(&models.Salary{}).Where("id = ?", salaryID).Updates(updates).Error; err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		utils.Error(c, "Gagal mencatatkan pembayaran: "+err.Error())
+		return
+	}
+
+	// Load updated record with payments preloaded
+	database.DB.Preload("Payments").First(&salary, "id = ?", salaryID)
+
+	// Kirim notifikasi ke karyawan
+	monthName := time.Month(salary.Month).String()
+	services.CreateNotification(salary.UserID, "admin", "Gaji Dibayarkan",
+		fmt.Sprintf("Gaji kamu untuk bulan %s %d telah dibayarkan sebesar Rp %.0f.", monthName, salary.Year, payAmount),
+		"PAYROLL_PAID", salary.ID)
+	services.SendPushNotification(salary.UserID, "Gaji Dibayarkan",
+		fmt.Sprintf("Gaji bulan %s kamu telah dibayarkan. Silakan cek detailnya!", monthName))
+
+	utils.Success(c, "Pembayaran berhasil dicatat", salary)
 }
 
 // UpdateBankInfo - Employee sets their own bank info
@@ -142,7 +270,7 @@ func UpdateBankInfo(c *gin.Context) {
 	userCtx, _ := c.Get("user")
 	user := userCtx.(models.User)
 	userID := user.ID
-	
+
 	var input struct {
 		BankName          string `json:"bank_name" binding:"required"`
 		BankAccountNumber string `json:"bank_account_number" binding:"required"`
@@ -174,20 +302,60 @@ func ensureSalariesGenerated(userID string) {
 		month := int(t.Month())
 		year := t.Year()
 
+		// Bersihkan duplikasi jika ada sebelum memproses penjaminan record
+		repairDuplicates(userID, month, year)
+
+		isCurrentMonth := (t.Year() == now.Year() && int(t.Month()) == int(now.Month()))
+
 		var exist models.Salary
 		err := database.DB.Where("user_id = ? AND month = ? AND year = ?", userID, month, year).First(&exist).Error
 		if err != nil { // Not found
 			generateSalary(userID, month, year)
-		} else if exist.Status == "PENDING" {
-			// Update rincian jika masih pending (karena denda bisa bertambah seiring hari berjalan)
+		} else if isCurrentMonth || exist.Status == "PENDING" || exist.TotalSalary <= 0 || (exist.Status == "PAID" && exist.PaidAmount < exist.TotalSalary) {
+			// Update rincian jika:
+			// 1. Bulan berjalan (absensi masih bisa bertambah)
+			// 2. Masih pending
+			// 3. Data korup (TotalSalary 0)
+			// 4. Status salah (Tertulis PAID tapi belum bayar penuh)
 			generateSalary(userID, month, year)
 		}
 	}
 }
 
+// repairDuplicates menggabungkan data gaji ganda jika ditemukan untuk satu user/bulan/tahun
+func repairDuplicates(userID string, month int, year int) {
+	var salaries []models.Salary
+	database.DB.Where("user_id = ? AND month = ? AND year = ?", userID, month, year).Find(&salaries)
+
+	if len(salaries) <= 1 {
+		return
+	}
+
+	// Pilih satu sebagai primary (yang sudah lunas atau yang punya pembayaran terbanyak)
+	primary := salaries[0]
+	for i := 1; i < len(salaries); i++ {
+		// Pindahkan semua Payments dari secondary ke primary
+		database.DB.Model(&models.SalaryPayment{}).Where("salary_id = ?", salaries[i].ID).Update("salary_id", primary.ID)
+		// Hapus record secondary
+		database.DB.Unscoped().Delete(&salaries[i])
+	}
+
+	// Setelah digabung, trigger hitung ulang total bayar pada record primary
+	generateSalary(userID, month, year)
+}
+
 func generateSalary(userID string, month int, year int) {
 	var user models.User
 	if err := database.DB.Preload("Position").First(&user, "id = ?", userID).Error; err != nil {
+		return
+	}
+
+	// JANGAN buat gaji untuk bulan SEBELUM karyawan bergabung
+	joinMonth := time.Date(user.CreatedAt.Year(), user.CreatedAt.Month(), 1, 0, 0, 0, 0, time.Local)
+	targetMonth := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.Local)
+	if targetMonth.Before(joinMonth) {
+		// Jika ini adalah data sampah dari bug sebelumnya, kita hapus saja
+		database.DB.Where("user_id = ? AND month = ? AND year = ?", userID, month, year).Delete(&models.Salary{})
 		return
 	}
 
@@ -197,13 +365,18 @@ func generateSalary(userID string, month int, year int) {
 		baseSalary = user.Position.Salary
 	}
 
-	// Hitung Denda
-	deductions := calculateDeductions(userID, month, year)
+	// Hitung Deductions (Terlambat & Alpha Denda)
+	deductions, details := CalculateDeductions(userID, month, year)
 
 	// Update or Create
 	var salary models.Salary
 	database.DB.Where("user_id = ? AND month = ? AND year = ?", userID, month, year).First(&salary)
-	
+
+	// Recalculate PaidAmount from actual payments to fix corruption
+	var actualPaid float64
+	database.DB.Model(&models.SalaryPayment{}).Where("salary_id = ?", salary.ID).Select("sum(amount)").Scan(&actualPaid)
+	salary.PaidAmount = actualPaid
+
 	if salary.ID == "" {
 		salary.ID = uuid.New().String()
 		salary.UserID = userID
@@ -211,20 +384,37 @@ func generateSalary(userID string, month int, year int) {
 		salary.Year = year
 		salary.Status = "PENDING"
 	}
-	
+
 	salary.BaseSalary = baseSalary
 	salary.Deductions = deductions
+	salary.DeductionsDetail = details
 	salary.TotalSalary = baseSalary - deductions
 	if salary.TotalSalary < 0 {
 		salary.TotalSalary = 0
 	}
 
+	// Sinkronisasi status berdasarkan histori pembayaran
+	if salary.TotalSalary > 0 {
+		if salary.PaidAmount >= salary.TotalSalary {
+			salary.Status = "PAID"
+		} else if salary.PaidAmount > 0 {
+			salary.Status = "PARTIAL"
+		} else {
+			salary.Status = "PENDING"
+		}
+	} else {
+		salary.Status = "PENDING"
+	}
+
 	database.DB.Save(&salary)
 }
 
-func calculateDeductions(userID string, month int, year int) float64 {
+func CalculateDeductions(userID string, month int, year int) (float64, string) {
+	var user models.User
+	database.DB.First(&user, "id = ?", userID)
+
 	var settings models.AttendanceSettings
-	database.DB.First(&settings) // Get first settings (assumed company wide for now)
+	database.DB.Where("company_id = ?", user.CompanyID).First(&settings)
 
 	// Parse Tiers
 	var tiers []LateTier
@@ -239,41 +429,76 @@ func calculateDeductions(userID string, month int, year int) float64 {
 	var attendances []models.Attendance
 	database.DB.Where("user_id = ? AND date >= ? AND date < ?", userID, startDate.Format("2006-01-02"), endDate.Format("2006-01-02")).Find(&attendances)
 
-	totalDeduction := 0.0
-	for _, att := range attendances {
-		if att.Status == "ABSENT" {
-			totalDeduction += settings.AlphaPenalty
-		} else if att.Status == "LATE" {
-			// Hitung durasi terlambat
-			if att.CheckInTime != nil {
-				// Parse CheckInEnd for that day
-				checkInEndStr := settings.CheckInEnd // Format "HH:MM"
-				attDateStr := att.Date             // "YYYY-MM-DD"
-				
-				layout := "2006-01-02 15:04"
-				deadline, _ := time.ParseInLocation(layout, attDateStr+" "+checkInEndStr, time.Local)
-				
-				lateDuration := att.CheckInTime.Sub(deadline)
-				if lateDuration > 0 {
-					lateHours := int(lateDuration.Hours())
-					if lateDuration.Minutes() > float64(lateHours * 60) {
-						lateHours++ // Pembulatan ke atas jam terlambat
-					}
+	// Tentukan batas akhir pencarian (jangan melewati hari ini jika bulan berjalan)
+	calculationEnd := endDate
+	now := time.Now()
+	if year == now.Year() && month == int(now.Month()) {
+		calculationEnd = now.AddDate(0, 0, 1) // Cek sampai hari ini
+		if calculationEnd.After(endDate) {
+			calculationEnd = endDate
+		}
+	}
 
-					// Cari Tier denda
-					appliedPenalty := settings.LatePenalty // Default flat penalty
-					maxTierHours := -1
-					for _, tier := range tiers {
-						if lateHours >= tier.Hours && tier.Hours > maxTierHours {
-							appliedPenalty = tier.Penalty
-							maxTierHours = tier.Hours
-						}
+	// 1. Map record yang ada untuk lookup cepat
+	existingRecords := make(map[string]models.Attendance)
+	for _, att := range attendances {
+		existingRecords[att.Date] = att
+	}
+
+	totalDeduction := 0.0
+	details := ""
+
+	// 2. Loop setiap tanggal dalam range bulan ini
+	for d := startDate; d.Before(calculationEnd); d = d.AddDate(0, 0, 1) {
+		dateStr := d.Format("2006-01-02")
+		
+		// Jangan denda Alpha jika tanggalnya sebelum user bergabung/dibuat
+		if dateStr < user.CreatedAt.Format("2006-01-02") {
+			continue
+		}
+
+		if att, exists := existingRecords[dateStr]; exists {
+			// Ada record: Tambahkan denda jika ada (Terlambat/Alpha Manual)
+			if att.SalaryDeduction > 0 {
+				totalDeduction += att.SalaryDeduction
+				reason := "Pelanggaran"
+				if att.Status == "LATE" {
+					reason = "Terlambat"
+				} else if att.Status == "ABSENT" {
+					reason = "Alpha"
+				}
+				details += reason + " pada " + att.Date + " (Rp " + strconv.FormatFloat(att.SalaryDeduction, 'f', 0, 64) + "); "
+			}
+		} else {
+			// Tidak ada record: Cek apakah hari kerja atau libur
+			isHold, _ := isHoliday(user.CompanyID, d)
+			if !isHold {
+				// Cek jam operasional jika itu hari ini (jangan alpha-kan hari ini sebelum waktunya habis)
+				if dateStr == now.Format("2006-01-02") {
+					loc := now.Location()
+					checkOutEnd := parseT(dateStr, settings.CheckOutEnd, loc)
+					if now.Before(checkOutEnd) {
+						continue // Belum dianggap alpha
 					}
-					totalDeduction += appliedPenalty
+				}
+
+				// Hari kerja tanpa absen = ALPHA
+				if settings.AlphaPenalty > 0 {
+					totalDeduction += settings.AlphaPenalty
+					details += "Alpha pada " + dateStr + " (Rp " + strconv.FormatFloat(settings.AlphaPenalty, 'f', 0, 64) + "); "
 				}
 			}
 		}
 	}
 
-	return totalDeduction
+	// 3. Tambahkan Denda Manual (Non-Absensi)
+	var manualPenalties []models.Penalty
+	database.DB.Where("user_id = ? AND date LIKE ?", userID, fmt.Sprintf("%d-%02d-%%", year, month)).Find(&manualPenalties)
+
+	for _, p := range manualPenalties {
+		totalDeduction += p.Amount
+		details += p.Title + " (Rp " + strconv.FormatFloat(p.Amount, 'f', 0, 64) + "); "
+	}
+
+	return totalDeduction, details
 }

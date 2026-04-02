@@ -1,7 +1,12 @@
 // lib/features/admin/presentation/screens/tabs/admin_profile_tab.dart
 
-import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import '../../../../common/widgets/premium_bottom_nav.dart';
+import '../holiday_management_screen.dart';
+import '../penalty_management_screen.dart';
+import 'dart:convert';
+import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import '../../../../../core/network/api_client.dart';
 import '../../../../../core/storage/session_storage.dart';
@@ -93,7 +98,7 @@ class _AdminProfileTabState extends State<AdminProfileTab> {
             }
           });
           if (mounted) {
-            AppDialog.showSuccess(context, 'Foto profil berhasil diperbarui.');
+            AppDialog.showSuccess(context, 'Foto pengaturan berhasil diperbarui.');
           }
         }
       } catch (e) {
@@ -221,7 +226,7 @@ class _AdminProfileTabState extends State<AdminProfileTab> {
                     });
                     if (!mounted) return;
                     if (res.success) {
-                      AppDialog.showSuccess(context, 'Profil Berhasil Diperbarui');
+                      AppDialog.showSuccess(context, 'Pengaturan Berhasil Diperbarui');
                     } else {
                       AppDialog.showError(context, res.message ?? 'Gagal memperbarui profil');
                     }
@@ -310,11 +315,38 @@ class _AdminProfileTabState extends State<AdminProfileTab> {
         text: _settings?['late_penalty'] != null
             ? CurrencyInputFormatter.formatNumber((_settings!['late_penalty'] as num).toInt())
             : '0');
+    
+    // Parse work_days from settings
+    List<String> workDays = (_settings?['work_days'] as String? ?? 'Monday,Tuesday,Wednesday,Thursday,Friday').split(',');
+    if (workDays.isEmpty || (workDays.length == 1 && workDays[0] == "")) {
+      workDays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+    }
 
     List<Map<String, dynamic>> tiers = [];
     if (_settings?['late_penalty_tiers'] != null) {
-      tiers = List<Map<String, dynamic>>.from(_settings!['late_penalty_tiers']);
+      final rawTiers = _settings!['late_penalty_tiers'];
+      if (rawTiers is String && rawTiers.isNotEmpty) {
+        try {
+          final decoded = jsonDecode(rawTiers);
+          if (decoded is List) {
+            tiers = List<Map<String, dynamic>>.from(decoded);
+          }
+        } catch (e) {
+          print("Error decoding late_penalty_tiers: $e");
+        }
+      } else if (rawTiers is Iterable) {
+        tiers = List<Map<String, dynamic>>.from(rawTiers);
+      }
     }
+
+    // Stable controllers management
+    List<TextEditingController> hourCtrls = tiers.map((t) => TextEditingController(text: t['hours'].toString())).toList();
+    List<TextEditingController> penaltyCtrls = tiers.map((t) => TextEditingController(text: CurrencyInputFormatter.formatNumber((t['penalty'] as num).toInt()))).toList();
+
+    // Backup original penalty value for restoration
+    final String originalBasicPenalty = _settings?['late_penalty'] != null
+        ? CurrencyInputFormatter.formatNumber((_settings!['late_penalty'] as num).toInt())
+        : '0';
 
     showModalBottomSheet(
       context: context,
@@ -322,17 +354,38 @@ class _AdminProfileTabState extends State<AdminProfileTab> {
       backgroundColor: Colors.transparent,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setModalState) => Container(
-          decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-          padding: EdgeInsets.only(left: 24, right: 24, top: 24, bottom: MediaQuery.of(ctx).viewInsets.bottom + 24),
+          decoration: const BoxDecoration(
+            color: Colors.white, 
+            borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+          ),
+          padding: EdgeInsets.only(
+            left: 24, right: 24, top: 20, 
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 32
+          ),
           child: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Jam Operasional', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: Color(0xFF0F172A))),
+                // Header with Close Button
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Jam Operasional', 
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 22, color: Color(0xFF0F172A))
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      icon: const Icon(Icons.close_rounded, color: Color(0xFF64748B)),
+                      style: IconButton.styleFrom(backgroundColor: const Color(0xFFF1F5F9)),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 24),
-                const Text('Absensi Masuk', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey)),
-                const SizedBox(height: 12),
+
+                // --- Section 1: Waktu Absensi ---
+                _buildSectionLabel('Waktu Absensi Masuk'),
                 Row(
                   children: [
                     Expanded(child: _buildField(checkInStartCtrl, 'Mulai', Icons.access_time_rounded)),
@@ -340,8 +393,7 @@ class _AdminProfileTabState extends State<AdminProfileTab> {
                     Expanded(child: _buildField(checkInEndCtrl, 'Selesai', Icons.timer_off_outlined)),
                   ],
                 ),
-                const Text('Absensi Pulang', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey)),
-                const SizedBox(height: 12),
+                _buildSectionLabel('Waktu Absensi Pulang'),
                 Row(
                   children: [
                     Expanded(child: _buildField(checkOutStartCtrl, 'Mulai', Icons.access_time_rounded)),
@@ -349,39 +401,91 @@ class _AdminProfileTabState extends State<AdminProfileTab> {
                     Expanded(child: _buildField(checkOutEndCtrl, 'Selesai', Icons.timer_off_outlined)),
                   ],
                 ),
-                _buildField(penaltyCtrl, 'Denda Alpha (Rp)', Icons.payments_outlined,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly, CurrencyInputFormatter()]),
-                _buildField(latePenaltyCtrl, 'Denda Terlambat Dasar (Rp)', Icons.warning_amber_rounded,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly, CurrencyInputFormatter()]),
+
+                const Divider(height: 32),
+
+                // --- Section 2: Sanksi & Denda ---
+                _buildSectionLabel('Sanksi Ketidakhadiran (Alpha)'),
+                _buildField(
+                  penaltyCtrl, 
+                  'Denda Alpha (Rp)', 
+                  Icons.payments_outlined,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly, CurrencyInputFormatter()]
+                ),
+
+                _buildSectionLabel('Denda Terlambat Dasar'),
+                Builder(
+                  builder: (context) {
+                    bool hasTiers = tiers.isNotEmpty;
+                    if (hasTiers) {
+                      latePenaltyCtrl.text = "Otomatis (Berjenjang)";
+                    } else if (latePenaltyCtrl.text == "Otomatis (Berjenjang)") {
+                      latePenaltyCtrl.text = originalBasicPenalty;
+                    }
+
+                    return _buildField(
+                      latePenaltyCtrl, 
+                      'Denda Per Keterlambatan', 
+                      Icons.warning_amber_rounded,
+                      keyboardType: TextInputType.number,
+                      readOnly: hasTiers,
+                      color: hasTiers ? const Color(0xFFF1F5F9) : const Color(0xFFF8FAFC),
+                      inputFormatters: hasTiers ? [] : [FilteringTextInputFormatter.digitsOnly, CurrencyInputFormatter()],
+                    );
+                  }
+                ),
                 
-                const Divider(),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
+
+                // --- Section 3: Denda Berjenjang ---
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('Denda Berjenjang (Opsional)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF0F172A))),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Denda Berjenjang (Opsional)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF0F172A))),
+                        Text('Sanksi tambahan berdasarkan lama keterlambatan', style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+                      ],
+                    ),
                     if (tiers.length < 5)
-                      TextButton.icon(
-                        icon: const Icon(Icons.add_circle_outline_rounded, size: 18),
-                        label: const Text('Tambah Tier', style: TextStyle(fontSize: 12)),
-                        onPressed: () => setModalState(() => tiers.add({'hours': 1, 'penalty': 10000.0})),
+                      IconButton.filled(
+                        icon: const Icon(Icons.add_rounded, size: 20),
+                        onPressed: () => setModalState(() {
+                          tiers.add({'hours': 1, 'penalty': 10000.0});
+                          hourCtrls.add(TextEditingController(text: '1'));
+                          penaltyCtrls.add(TextEditingController(text: '10.000'));
+                        }),
+                        style: IconButton.styleFrom(backgroundColor: const Color(0xFF2563EB)),
                       ),
                   ],
                 ),
-                const Text('Denda tambahan untuk keterlambatan yang makin lama', style: TextStyle(fontSize: 11, color: Colors.grey)),
                 const SizedBox(height: 16),
                 
+                if (tiers.isEmpty)
+                  Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 24),
+                      child: Text('Belum ada sanksi berjenjang', style: TextStyle(color: Colors.grey.shade400, fontSize: 13, fontStyle: FontStyle.italic)),
+                    ),
+                  ),
+
                 ...List.generate(tiers.length, (index) {
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                    ),
                     child: Row(
                       children: [
                         Expanded(
                           flex: 2,
                           child: _buildField(
-                            TextEditingController(text: tiers[index]['hours'].toString()),
+                            hourCtrls[index],
                             'Jam Ke-', Icons.timer_outlined,
                             keyboardType: TextInputType.number,
                             onChanged: (v) => tiers[index]['hours'] = int.tryParse(v) ?? 1,
@@ -391,34 +495,38 @@ class _AdminProfileTabState extends State<AdminProfileTab> {
                         Expanded(
                           flex: 3,
                           child: _buildField(
-                            TextEditingController(text: CurrencyInputFormatter.formatNumber((tiers[index]['penalty'] as num).toInt())),
-                            'Denda (Rp)', Icons.payments_rounded,
+                            penaltyCtrls[index],
+                            'Besar Sanksi (Rp)', Icons.payments_rounded,
                             keyboardType: TextInputType.number,
                             inputFormatters: [FilteringTextInputFormatter.digitsOnly, CurrencyInputFormatter()],
                             onChanged: (v) => tiers[index]['penalty'] = CurrencyInputFormatter.unformat(v).toDouble(),
                           ),
                         ),
+                        const SizedBox(width: 8),
                         IconButton(
-                          icon: const Icon(Icons.delete_outline_rounded, color: Colors.red),
-                          onPressed: () => setModalState(() => tiers.removeAt(index)),
+                          padding: EdgeInsets.zero,
+                          icon: const Icon(Icons.delete_forever_rounded, color: Colors.red),
+                          onPressed: () => setModalState(() {
+                            tiers.removeAt(index);
+                            hourCtrls.removeAt(index);
+                            penaltyCtrls.removeAt(index);
+                          }),
                         ),
                       ],
                     ),
                   );
                 }),
 
-                if (tiers.isEmpty)
-                  Center(child: Padding(padding: const EdgeInsets.only(bottom: 16), child: Text('Belum ada denda berjenjang', style: TextStyle(color: Colors.grey.shade400, fontSize: 12)))),
-
-                const SizedBox(height: 16),
+                const SizedBox(height: 32),
                 SizedBox(
                   width: double.infinity,
+                  height: 56,
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF2563EB),
                       foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      elevation: 0,
                     ),
                     onPressed: () async {
                       Navigator.pop(ctx);
@@ -428,18 +536,19 @@ class _AdminProfileTabState extends State<AdminProfileTab> {
                         'check_out_start': checkOutStartCtrl.text.trim(),
                         'check_out_end': checkOutEndCtrl.text.trim(),
                         'alpha_penalty': CurrencyInputFormatter.unformat(penaltyCtrl.text.trim()).toDouble(),
-                        'late_penalty': CurrencyInputFormatter.unformat(latePenaltyCtrl.text.trim()).toDouble(),
+                        'late_penalty': tiers.isNotEmpty ? 0 : CurrencyInputFormatter.unformat(latePenaltyCtrl.text.trim()).toDouble(),
                         'late_penalty_tiers': tiers,
+                        'work_days': workDays.join(','),
                       });
                       if (!mounted) return;
                       if (res.success) {
-                        AppDialog.showSuccess(context, 'Pengaturan Tersimpan');
+                        AppDialog.showSuccess(context, 'Pengaturan operasional disimpan');
                       } else {
                         AppDialog.showError(context, res.message ?? 'Gagal menyimpan pengaturan');
                       }
                       if (res.success) _load();
                     },
-                    child: const Text('Simpan Pengaturan', style: TextStyle(fontWeight: FontWeight.bold)),
+                    child: const Text('Simpan Perubahan', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                   ),
                 ),
               ],
@@ -450,8 +559,18 @@ class _AdminProfileTabState extends State<AdminProfileTab> {
     );
   }
 
+  Widget _buildSectionLabel(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Text(
+        text, 
+        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF64748B))
+      ),
+    );
+  }
+
   Widget _buildField(TextEditingController ctrl, String label, IconData icon,
-      {TextInputType? keyboardType, int maxLines = 1, List<TextInputFormatter>? inputFormatters, bool readOnly = false, VoidCallback? onTap, Function(String)? onChanged}) {
+      {TextInputType? keyboardType, int maxLines = 1, List<TextInputFormatter>? inputFormatters, bool readOnly = false, Color? color, VoidCallback? onTap, Function(String)? onChanged}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -468,7 +587,7 @@ class _AdminProfileTabState extends State<AdminProfileTab> {
           decoration: InputDecoration(
             prefixIcon: Icon(icon, color: const Color(0xFF64748B), size: 20),
             filled: true,
-            fillColor: const Color(0xFFF8FAFC),
+            fillColor: color ?? const Color(0xFFF8FAFC),
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade200)),
             enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade200)),
             focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.5)),
@@ -616,15 +735,44 @@ class _AdminProfileTabState extends State<AdminProfileTab> {
                   ),
                   const SizedBox(height: 20),
                   _buildDataCard(
-                    title: 'Operasional',
+                    title: 'Waktu Operasional',
                     icon: Icons.timer_outlined,
-                    color: const Color(0xFF0F172A),
+                    color: const Color(0xFF2563EB),
                     onEdit: _editAttendanceSettings,
                     rows: [
                       _infoRow('Check-In', '${_val(_settings, ['check_in_start'])} - ${_val(_settings, ['check_in_end'])}'),
                       _infoRow('Check-Out', '${_val(_settings, ['check_out_start'])} - ${_val(_settings, ['check_out_end'])}'),
                       _infoRow('Sanksi Alpha', 'Rp ${CurrencyInputFormatter.formatNumber((_settings?['alpha_penalty'] as num?)?.toInt() ?? 0)}'),
-                      _infoRow('Sanksi Terlambat', 'Rp ${CurrencyInputFormatter.formatNumber((_settings?['late_penalty'] as num?)?.toInt() ?? 0)}'),
+                      if (_settings?['late_penalty_tiers'] == null || _settings!['late_penalty_tiers'].toString() == "[]" || _settings!['late_penalty_tiers'].toString() == "")
+                        _infoRow('Sanksi Terlambat', 'Rp ${CurrencyInputFormatter.formatNumber((_settings?['late_penalty'] as num?)?.toInt() ?? 0)}')
+                      else
+                        _infoRow('Sanksi Terlambat', 'Berjenjang (Aktif)'),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  _buildDataCard(
+                    title: 'Hari Libur',
+                    icon: Icons.beach_access_rounded,
+                    color: const Color(0xFF2563EB),
+                    onEdit: () {
+                      Navigator.push(context, MaterialPageRoute(builder: (context) => const HolidayManagementScreen())).then((_) => _load());
+                    },
+                    rows: [
+                      _infoRow('Jadwal Kerja', _settings?['work_days']?.toString().split(',').length == 7 ? 'Setiap Hari' : (_settings?['work_days']?.toString() ?? 'Senin - Jumat').replaceAll('Monday', 'Sen').replaceAll('Tuesday', 'Sel').replaceAll('Wednesday', 'Rab').replaceAll('Thursday', 'Kam').replaceAll('Friday', 'Jum').replaceAll('Saturday', 'Sab').replaceAll('Sunday', 'Min')),
+                      _infoRow('Status', 'Kelola hari libur khusus'),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  _buildDataCard(
+                    title: 'Denda Pelanggaran',
+                    icon: Icons.gavel_rounded,
+                    color: const Color(0xFFDC2626), // Red for penalty
+                    onEdit: () {
+                      Navigator.push(context, MaterialPageRoute(builder: (context) => const PenaltyManagementScreen())).then((_) => _load());
+                    },
+                    rows: [
+                      _infoRow('Status', 'Kelola denda non-absensi'),
+                      _infoRow('Info', 'Akan mengurangi gaji bersih'),
                     ],
                   ),
                   const SizedBox(height: 20),

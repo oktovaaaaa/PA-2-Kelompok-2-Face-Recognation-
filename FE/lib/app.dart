@@ -7,6 +7,7 @@ import 'core/providers/auth_provider.dart';
 import 'core/providers/session_provider.dart';
 import 'features/admin/presentation/screens/splash_gate.dart';
 import 'features/admin/presentation/screens/login_screen.dart' as features_login;
+import 'core/services/notification_service.dart';
 
 class EmployeeSystemApp extends StatelessWidget {
   const EmployeeSystemApp({super.key});
@@ -88,6 +89,8 @@ class _LifecycleWatcherState extends State<_LifecycleWatcher> with WidgetsBindin
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // Inisialisasi notifikasi (minta izin, token, dll)
+    NotificationService.initialize();
   }
 
   @override
