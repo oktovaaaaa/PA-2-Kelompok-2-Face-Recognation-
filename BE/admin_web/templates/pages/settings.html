@@ -1,5 +1,5 @@
 <!-- BE/admin_web/templates/pages/settings.html -->
-{{ define "content" }}
+{{ define "settings_content" }}
 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 24px;">
     
     <!-- Profil Perusahaan -->
@@ -79,7 +79,7 @@
 </div>
 {{ end }}
 
-{{ define "scripts" }}
+{{ define "settings_scripts" }}
 <script>
     async function loadSettings() {
         try {

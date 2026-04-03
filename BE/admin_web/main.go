@@ -44,7 +44,7 @@ func main() {
 			c.HTML(200, "employees.html", gin.H{"title": "Daftar Karyawan", "active": "employees"})
 		})
 		web.GET("/employees/pending", func(c *gin.Context) {
-			c.HTML(200, "pending_employees.html", gin.H{"title": "Karyawan Pending", "active": "employees"})
+			c.HTML(200, "pending_employees.html", gin.H{"title": "Karyawan Pending", "active": "pending_employees"})
 		})
 		web.GET("/payroll", func(c *gin.Context) {
 			c.HTML(200, "payroll.html", gin.H{"title": "Manajemen Gaji", "active": "payroll"})

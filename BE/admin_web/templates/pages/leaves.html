@@ -1,5 +1,5 @@
 <!-- BE/admin_web/templates/pages/leaves.html -->
-{{ define "content" }}
+{{ define "leaves_content" }}
 <div class="stat-card" style="margin-bottom: 24px; padding: 24px;">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
         <h2 style="font-weight: 800; font-size: 20px;">Manajemen Perizinan</h2>
@@ -43,7 +43,7 @@
 </div>
 {{ end }}
 
-{{ define "scripts" }}
+{{ define "leaves_scripts" }}
 <script>
     async function loadLeaves() {
         const status = document.getElementById('filter-status').value;

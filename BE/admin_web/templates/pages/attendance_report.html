@@ -1,5 +1,5 @@
 <!-- BE/admin_web/templates/pages/attendance_report.html -->
-{{ define "content" }}
+{{ define "attendance_content" }}
 <div class="stat-card" style="margin-bottom: 24px; padding: 24px;">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
         <h2 style="font-weight: 800; font-size: 20px;">Laporan Kehadiran</h2>
@@ -64,7 +64,7 @@
 </div>
 {{ end }}
 
-{{ define "scripts" }}
+{{ define "attendance_scripts" }}
 <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
 <script>
     let attendance = [];

@@ -1,5 +1,5 @@
 <!-- BE/admin_web/templates/pages/pending_employees.html -->
-{{ define "content" }}
+{{ define "pending_employees_content" }}
 <div class="stat-card" style="margin-bottom: 24px; padding: 24px;">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
         <h2 style="font-weight: 800; font-size: 20px;">Persetujuan Karyawan Baru</h2>
@@ -31,7 +31,7 @@
 </div>
 {{ end }}
 
-{{ define "scripts" }}
+{{ define "pending_employees_scripts" }}
 <script>
     async function loadPending() {
         try {

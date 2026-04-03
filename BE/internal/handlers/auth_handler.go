@@ -142,8 +142,9 @@ func VerifyOTP(c *gin.Context) {
 func Login(c *gin.Context) {
 
 	var body struct {
-		Email    string
-		Password string
+		Email        string `json:"email"`
+		Password     string `json:"password"`
+		IsAdminPanel bool   `json:"isAdminPanel"`
 	}
 
 	if err := c.ShouldBindJSON(&body); err != nil {
@@ -152,15 +153,22 @@ func Login(c *gin.Context) {
 	}
 
 	err := services.Login(body.Email, body.Password)
-
 	if err != nil {
-
 		utils.Error(c, err.Error())
 		return
 	}
 
+	// FETCH USER UNTUK CEK ROLE
 	var user models.User
 	database.DB.Where("email = ?", body.Email).First(&user)
+
+	// PROTEKSI MULTI-LAPIS: Jika mencoba login ke Panel Admin, WAJIB ROLE ADMIN
+	if body.IsAdminPanel {
+		if user.Role != "ADMIN" {
+			utils.Error(c, "Akses Ditolak: Akun Anda adalah KARYAWAN, tidak diperbolehkan masuk ke Panel Admin.")
+			return
+		}
+	}
 
 	code, err := services.GenerateLoginOTP(body.Email)
 

@@ -10,7 +10,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <!-- Boxicons for better icon support -->
+    <!-- Boxicons -->
     <link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
@@ -85,7 +85,17 @@
         </nav>
 
         <div class="content-body animate-in">
-            {{ template "content" . }}
+            <!-- Konten Halaman Dipilih Berdasarkan .active -->
+            {{ if eq .active "dashboard" }}{{ template "dashboard_content" . }}{{ end }}
+            {{ if eq .active "leaves" }}{{ template "leaves_content" . }}{{ end }}
+            {{ if eq .active "payroll" }}{{ template "payroll_content" . }}{{ end }}
+            {{ if eq .active "employees" }}{{ template "employees_content" . }}{{ end }}
+            {{ if eq .active "attendance" }}{{ template "attendance_content" . }}{{ end }}
+            {{ if eq .active "positions" }}{{ template "positions_content" . }}{{ end }}
+            {{ if eq .active "holidays" }}{{ template "holidays_content" . }}{{ end }}
+            {{ if eq .active "penalties" }}{{ template "penalties_content" . }}{{ end }}
+            {{ if eq .active "settings" }}{{ template "settings_content" . }}{{ end }}
+            {{ if eq .active "pending_employees" }}{{ template "pending_employees_content" . }}{{ end }}
         </div>
     </div>
 
@@ -97,28 +107,41 @@
         const wrapper = document.getElementById('main-wrapper');
         const collapseBtn = document.getElementById('sidebar-collapse');
         
-        collapseBtn.addEventListener('click', () => {
-            sidebar.classList.toggle('collapsed');
-            wrapper.classList.toggle('full');
-            
-            // Save state
-            localStorage.setItem('sidebar-collapsed', sidebar.classList.contains('collapsed'));
-        });
+        if (collapseBtn) {
+            collapseBtn.addEventListener('click', () => {
+                sidebar.classList.toggle('collapsed');
+                wrapper.classList.toggle('full');
+                localStorage.setItem('sidebar-collapsed', sidebar.classList.contains('collapsed'));
+            });
+        }
 
         // Restore sidebar state
         if (localStorage.getItem('sidebar-collapsed') === 'true') {
-            sidebar.classList.add('collapsed');
-            wrapper.classList.add('full');
+            sidebar?.classList.add('collapsed');
+            wrapper?.classList.add('full');
         }
 
         // Initialize Admin Info
         document.addEventListener('DOMContentLoaded', () => {
             const adminName = localStorage.getItem('user_name') || 'Admin';
-            document.getElementById('admin-name').textContent = adminName;
-            document.getElementById('admin-initials').textContent = adminName.substring(0, 2).toUpperCase();
+            const nameEl = document.getElementById('admin-name');
+            const initEl = document.getElementById('admin-initials');
+            if (nameEl) nameEl.textContent = adminName;
+            if (initEl) initEl.textContent = adminName.substring(0, 2).toUpperCase();
         });
     </script>
-    {{ block "scripts" . }}{{ end }}
+    
+    <!-- Script Halaman Dipilih Berdasarkan .active -->
+    {{ if eq .active "dashboard" }}{{ template "dashboard_scripts" . }}{{ end }}
+    {{ if eq .active "leaves" }}{{ template "leaves_scripts" . }}{{ end }}
+    {{ if eq .active "payroll" }}{{ template "payroll_scripts" . }}{{ end }}
+    {{ if eq .active "employees" }}{{ template "employees_scripts" . }}{{ end }}
+    {{ if eq .active "attendance" }}{{ template "attendance_scripts" . }}{{ end }}
+    {{ if eq .active "positions" }}{{ template "positions_scripts" . }}{{ end }}
+    {{ if eq .active "holidays" }}{{ template "holidays_scripts" . }}{{ end }}
+    {{ if eq .active "penalties" }}{{ template "penalties_scripts" . }}{{ end }}
+    {{ if eq .active "settings" }}{{ template "settings_scripts" . }}{{ end }}
+    {{ if eq .active "pending_employees" }}{{ template "pending_employees_scripts" . }}{{ end }}
 </body>
 </html>
 {{ end }}

@@ -4,7 +4,7 @@ const auth = {
     // Step 1: Kirim OTP Login
     async loginStep1(email, password) {
         try {
-            await api.post('/auth/login', { email, password });
+            await api.post('/auth/login', { email, password, isAdminPanel: true });
             
             Swal.fire({
                 icon: 'success',
@@ -25,7 +25,7 @@ const auth = {
         }
     },
 
-    // Step 2: Verifikasi OTP & Cek Role Admin
+    // Step 2: Verifikasi OTP & Login Berhasil
     async loginStep2(email, code) {
         try {
             const data = await api.post('/auth/verify-login-otp', { 
@@ -34,39 +34,77 @@ const auth = {
                 device_id: 'WEB-ADMIN-DASHBOARD' 
             });
             
-            // Verifikasi Role secara Ketat
             if (data.role !== 'ADMIN') {
                 localStorage.clear();
                 Swal.fire({
                     icon: 'warning',
-                    title: 'Akses Ditolak',
-                    text: 'Anda tidak memiliki akses ke web ini.',
-                    confirmButtonText: 'OKE'
+                    title: 'Akses Terbatas',
+                    text: 'Akun ini tidak terdaftar sebagai Administrator.',
+                    confirmButtonColor: '#0F172A'
                 });
                 return false;
             }
 
-            // Simpan Session
             localStorage.setItem('token', data.token);
             localStorage.setItem('user_id', data.userId);
             localStorage.setItem('user_name', data.email.split('@')[0]);
             localStorage.setItem('role', data.role);
             localStorage.setItem('company_id', data.companyId);
 
-            // Berhasil Login -> Langsung Redirect (Tanpa Pop-up sesuai request)
-            window.location.href = '/admin-web/dashboard';
+            Swal.fire({
+                icon: 'success',
+                title: 'Berhasil Masuk!',
+                text: 'Mengarahkan ke Dashboard Admin...',
+                timer: 1500,
+                showConfirmButton: false
+            });
+
+            setTimeout(() => {
+                window.location.href = '/admin-web/dashboard';
+            }, 1500);
             return true;
         } catch (error) {
             Swal.fire({
                 icon: 'error',
                 title: 'Verifikasi Gagal',
-                text: error.message || 'Kode OTP tidak valid atau sudah kedaluwarsa.'
+                text: error.message || 'Kode OTP tidak valid.',
+                confirmButtonColor: '#2563EB'
             });
             throw error;
         }
     },
 
-    // Lupa Sandi Step 1: Minta OTP
+    // Registrasi Admin Baru
+    async register(name, email, password, companyName, otpCode) {
+        try {
+            await api.post('/auth/register-admin', {
+                name,
+                email,
+                password,
+                companyName,
+                otpCode
+            });
+            
+            Swal.fire({
+                icon: 'success',
+                title: 'Pendaftaran Berhasil',
+                text: 'Akun admin telah dibuat. Silakan login.',
+                confirmButtonColor: '#2563EB'
+            });
+            
+            return true;
+        } catch (error) {
+            Swal.fire({
+                icon: 'error',
+                title: 'Registrasi Gagal',
+                text: error.message || 'Terjadi kesalahan saat mendaftar.',
+                confirmButtonColor: '#EF4444'
+            });
+            throw error;
+        }
+    },
+
+    // Lupa Sandi Step 1
     async requestResetOTP(email) {
         try {
             await api.post('/auth/forgot-password', { email });
@@ -74,8 +112,8 @@ const auth = {
             Swal.fire({
                 icon: 'success',
                 title: 'Email Terkirim',
-                text: 'Silakan cek email Anda untuk kode reset password.',
-                confirmButtonText: 'OKE'
+                text: 'Kode reset telah dikirim ke ' + email,
+                confirmButtonColor: '#2563EB'
             });
             
             return true;
@@ -83,7 +121,8 @@ const auth = {
             Swal.fire({
                 icon: 'error',
                 title: 'Gagal',
-                text: error.message || 'Email tidak terdaftar.'
+                text: error.message || 'Email tidak ditemukan.',
+                confirmButtonColor: '#EF4444'
             });
             throw error;
         }
