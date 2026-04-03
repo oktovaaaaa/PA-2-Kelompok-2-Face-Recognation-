@@ -40,7 +40,7 @@ func VerifyOTP(email string, code string) error {
 	var otp models.OTP
 
 	err := database.DB.Where(
-		"email = ? AND code = ? AND used = false",
+		"LOWER(email) = LOWER(?) AND code = ? AND used = false",
 		email,
 		code,
 	).First(&otp).Error

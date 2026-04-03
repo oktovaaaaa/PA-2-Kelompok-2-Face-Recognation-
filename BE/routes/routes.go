@@ -14,6 +14,9 @@ func SetupRouter() *gin.Engine {
 
 	r := gin.Default()
 
+	// Enable CORS
+	r.Use(middleware.CORSMiddleware())
+
 	// Serve file upload statis
 	r.Static("/uploads", "./uploads")
 
@@ -98,8 +101,11 @@ func SetupRouter() *gin.Engine {
 
 		// Riwayat absensi semua karyawan
 		admin.GET("/attendance", handlers.AdminGetAttendanceHistory)
+		admin.GET("/attendance/years", handlers.AdminGetAttendanceYears)
 		admin.DELETE("/attendance", handlers.AdminBulkDeleteAttendance)
 		admin.GET("/dashboard/summary", handlers.AdminGetDashboardSummary)
+		admin.GET("/dashboard/detailed-summary", handlers.AdminGetDetailedDashboardSummary)
+		admin.GET("/dashboard/trend", handlers.AdminGetAttendanceTrend)
 
 		// Pengaturan absensi
 		admin.GET("/attendance-settings", handlers.GetAttendanceSettings)

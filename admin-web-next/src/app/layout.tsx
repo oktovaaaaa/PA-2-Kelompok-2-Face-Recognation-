@@ -1,0 +1,38 @@
+import { Outfit } from 'next/font/google'
+
+// Type Imports
+import type { ChildrenType } from '@core/types'
+
+// Style Imports
+import '@/app/globals.css'
+
+// Generated Icon CSS Imports
+import '@assets/iconify-icons/generated-icons.css'
+
+// Component Imports
+import Providers from '@components/Providers'
+
+const outfit = Outfit({ subsets: ['latin'], weight: ['300', '400', '500', '600', '700', '800', '900'] })
+
+export const metadata = {
+  title: 'Login | Face Recognition Admin',
+  description: 'Face Recognition Attendance Management System'
+}
+
+const RootLayout = ({ children }: ChildrenType) => {
+  // Vars
+  const direction = 'ltr'
+
+  return (
+    <html id='__next' dir={direction}>
+      <head>
+        <link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet' />
+      </head>
+      <body className={`${outfit.className} flex is-full min-bs-full flex-auto flex-col`}>
+        <Providers direction={direction}>{children}</Providers>
+      </body>
+    </html>
+  )
+}
+
+export default RootLayout

@@ -13,6 +13,7 @@
     <link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
     <style>
         :root {
             --primary-color: #2563EB;
@@ -26,17 +27,24 @@
 
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Outfit', sans-serif; }
 
+        html, body { 
+            height: 100%; 
+            margin: 0; 
+            padding: 0; 
+            overflow: hidden; 
+        }
+
         .login-page {
-            height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            height: 100%;
+            width: 100%;
+            display: grid;
+            place-items: center;
             background: #F1F5F9;
-            padding: 20px;
+            position: relative;
         }
 
         .login-container {
-            width: 100%;
+            width: 90%;
             max-width: 1000px;
             height: 600px;
             background: white;
@@ -44,6 +52,8 @@
             display: flex;
             overflow: hidden;
             box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15);
+            position: relative; /* Penting untuk target SweetAlert2 */
+            z-index: 10;
         }
 
         .welcome-pane {
@@ -67,11 +77,56 @@
         .circle-2 { width: 250px; height: 250px; top: -50px; right: -50px; }
         .circle-3 { width: 150px; height: 150px; bottom: 100px; right: 50px; background: rgba(255, 255, 255, 0.05); }
 
-        .form-pane { flex: 1; padding: 60px; position: relative; display: flex; flex-direction: column; justify-content: center; }
+        .form-pane { 
+            flex: 1; 
+            padding: 80px 60px; /* Fixed padding top instead of center */
+            position: relative; 
+            display: flex; 
+            flex-direction: column; 
+            min-height: 500px; 
+        }
 
-        .view-container { display: none; }
-        .view-container.active { display: block; animation: slideUp 0.4s ease forwards; }
-        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        .view-container { 
+            display: none; 
+            min-height: 400px; /* Ensure both views occupy same space */
+        }
+        
+        .view-container.active { 
+            display: block; 
+        }
+
+        /* Custom Overlay Sukses (Penimpa) */
+        .success-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255, 255, 255, 0.95);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            text-align: center;
+            padding: 40px;
+            border-radius: 0 32px 32px 0;
+        }
+
+        .success-overlay.active { display: flex; animation: fadeIn 0.3s ease; }
+
+        .success-icon {
+            width: 80px;
+            height: 80px;
+            background: #D1FAE5;
+            color: #10B981;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 40px;
+            margin-bottom: 20px;
+        }
 
         .auth-title { font-size: 32px; font-weight: 800; margin-bottom: 8px; color: var(--primary-dark); }
         .auth-subtitle { color: var(--text-muted); font-size: 14px; margin-bottom: 32px; }
@@ -119,6 +174,15 @@
 
         <!-- RIGHT PANE -->
         <div class="form-pane">
+            <!-- Custom Overlay Sukses (Penimpa Internal) -->
+            <div id="otp-success-overlay" class="success-overlay">
+                <div class="success-icon">
+                    <i class='bx bx-check-circle'></i>
+                </div>
+                <h3 style="font-size: 24px; font-weight: 800; color: #0F172A; margin-bottom: 8px;">OTP Dikirim</h3>
+                <p style="color: #64748B; font-size: 14px;">Silakan periksa email Admin Anda.</p>
+            </div>
+
             <!-- VIEW: LOGIN -->
             <div id="view-login" class="view-container active">
                 <h2 class="auth-title">Masuk Admin</h2>
@@ -281,12 +345,20 @@
             const email = document.getElementById('email').value;
             const password = document.getElementById('password').value;
 
+            // HELPER UNTUK SWAL STABIL (LOCK DI KARTU)
+            const swalLock = (config) => {
+                return Swal.fire({
+                    ...config,
+                    target: '.login-container',
+                    scrollbarPadding: false,
+                    position: 'center'
+                });
+            };
+
             btn.disabled = true;
             btn.innerHTML = '<i class="bx bx-loader-alt bx-spin"></i> Memproses...';
 
             try {
-                // MEMANGGIL API LANGSUNG (BYPASS AUTH.JS UNTUK MENGHINDARI CACHE)
-                // isAdminPanel: true akan memicu proteksi Admin di Backend
                 const response = await fetch('/api/auth/login', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -299,21 +371,23 @@
                     throw new Error(result.message || 'Login Gagal');
                 }
 
-                // Jika Berhasil:
-                Swal.fire({
-                    icon: 'success',
-                    title: 'OTP Dikirim',
-                    text: 'Silakan periksa email Admin Anda.',
-                    timer: 1500,
-                    showConfirmButton: false
-                });
-
+                // PINDAH TAMPILAN DULU
                 currentEmail = email;
                 document.getElementById('display-email').textContent = email;
                 showView('view-otp');
                 startTimer();
+
+                // MUNCULKAN OVERLAY PENIMPA (Custom, bukan Swal)
+                const overlay = document.getElementById('otp-success-overlay');
+                overlay.classList.add('active');
+                
+                // Hilang otomatis setelah 2 detik
+                setTimeout(() => {
+                    overlay.classList.remove('active');
+                }, 2000);
+
             } catch (err) {
-                Swal.fire({
+                swalLock({
                     icon: 'error',
                     title: 'Akses Ditolak',
                     text: err.message || 'Hanya Admin yang diperbolehkan masuk.',
@@ -364,19 +438,63 @@
             try {
                 if (await auth.resetPassword(currentEmail, code, newPass)) {
                     showView('view-login');
+                    swalLock({ icon: 'success', title: 'Berhasil', text: 'Kata sandi telah diperbarui.', timer: 2000, showConfirmButton: false });
                 }
-            } catch (err) {}
+            } catch (err) {
+                swalLock({ icon: 'error', title: 'Gagal', text: err.message });
+            }
             finally { btn.disabled = false; btn.textContent = 'Update Kata Sandi'; }
         });
 
-        async function handleResend() {
-            await api.post('/auth/send-otp', { email: currentEmail });
-            Swal.fire({ icon: 'success', title: 'Terkirim!', text: 'Kode baru telah dikirim.', timer: 1500, showConfirmButton: false });
-            startTimer();
+        window.onload = function () {
+            google.accounts.id.initialize({
+                client_id: "243162737895-kcmtm025shs0tdiqk1grmskjn7qspdmg.apps.googleusercontent.com",
+                callback: handleCredentialResponse
+            });
+        };
+
+        async function handleCredentialResponse(response) {
+            try {
+                if (!response.credential) throw new Error("Gagal mendapatkan izin dari Google");
+
+                const res = await fetch('/api/auth/google-login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id_token: response.credential })
+                });
+                const result = await res.json();
+                
+                if (!res.ok) throw new Error(result.message || 'Gagal masuk dengan Google');
+
+                // Sukses
+                const overlay = document.getElementById('otp-success-overlay');
+                overlay.classList.add('active');
+                setTimeout(() => {
+                    localStorage.setItem('token', result.token);
+                    window.location.href = '/admin-web/dashboard';
+                }, 1500);
+            } catch (err) {
+                swalLock({ 
+                    icon: 'error', 
+                    title: 'Google Auth Terblokir', 
+                    html: `
+                        <div style="text-align: left; font-size: 13px; line-height: 1.6;">
+                            <p><b>Penyebab Umum:</b></p>
+                            <ul style="margin-left: 20px; margin-bottom: 15px;">
+                                <li>Alamat <code>localhost:8080</code> belum terdaftar di Google Console.</li>
+                                <li>Client ID di <code>.env</code> mungkin tipe Android/iOS (Harus tipe <b>Web</b>).</li>
+                            </ul>
+                            <p><b>Pesan teknis:</b><br><code style="background: #fee2e2; padding: 2px 4px; border-radius: 4px;">${err.message}</code></p>
+                        </div>
+                    `,
+                    confirmButtonColor: '#2563EB',
+                    confirmButtonText: 'Saya Mengerti'
+                });
+            }
         }
 
         async function handleGoogleLogin() {
-            Swal.fire({ title: 'Info', text: 'Gunakan form email/password khusus Admin.', icon: 'info' });
+            google.accounts.id.prompt(); // Memunculkan One-Tap atau Google Picker
         }
     </script>
 </body>

@@ -8,6 +8,7 @@ import (
 	"employee-system/internal/services"
 	"employee-system/internal/utils"
 
+	"fmt"
 	"github.com/gin-gonic/gin"
 )
 
@@ -212,7 +213,13 @@ func VerifyLoginOTP(c *gin.Context) {
 	}
 
 	var user models.User
-	database.DB.Where("email = ?", body.Email).First(&user)
+	err = database.DB.Where("LOWER(email) = LOWER(?)", body.Email).First(&user).Error
+	if err != nil {
+		utils.Error(c, "Data pengguna tidak ditemukan setelah verifikasi OTP")
+		return
+	}
+
+	fmt.Printf("[DEBUG] Login Attempt: %s | Role: %s | Status: %s\n", user.Email, user.Role, user.Status)
 
 	if user.Status == "PENDING" {
 		utils.Error(c, "Akun Anda masih dalam status menunggu persetujuan admin")

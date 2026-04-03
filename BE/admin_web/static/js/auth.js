@@ -177,15 +177,19 @@ const auth = {
         const token = localStorage.getItem('token');
         const isLoginPath = window.location.pathname.includes('/login');
 
+        // Jika tidak ada token dan bukan di halaman login -> tendang ke login
         if (!token && !isLoginPath) {
             window.location.href = '/admin-web/login';
-        } else if (token && isLoginPath) {
+            return;
+        } 
+        
+        // JIKA ADA TOKEN dan sedang di halaman login -> langsung masuk dashboard
+        if (token && isLoginPath) {
             window.location.href = '/admin-web/dashboard';
+            return;
         }
     }
 };
 
-// Cek autentikasi jika bukan halaman login
-if (!window.location.pathname.includes('/login')) {
-    auth.checkAuth();
-}
+// Jalankan cek auth di SEMUA halaman
+auth.checkAuth();

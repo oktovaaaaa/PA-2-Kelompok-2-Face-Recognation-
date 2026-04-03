@@ -213,7 +213,7 @@ func GetTodayAttendance(c *gin.Context) {
 
 	// Hitung total denda bulan ini untuk estimasi gaji
 	var totalDeductionMonth float64
-	
+
 	// Gunakan logika bersama agar sinkron dengan tab Gaji
 	// Ini akan menghitung semua denda absensi + denda manual + denda Alpha otomatis
 	totalDeductionMonth, _ = CalculateDeductions(emp.ID, int(now.Month()), now.Year())
@@ -267,7 +267,7 @@ func GetMyAttendanceHistory(c *gin.Context) {
 	// 1. Tentukan tanggal awal & akhir untuk pengecekan
 	var startT, endT time.Time
 	now := time.Now()
-	
+
 	if year != "" {
 		yInt, _ := strconv.Atoi(year)
 		if month != "" {
@@ -301,7 +301,7 @@ func GetMyAttendanceHistory(c *gin.Context) {
 	// 4. Loop setiap tanggal dalam range
 	for d := startT; !d.After(endT); d = d.AddDate(0, 0, 1) {
 		dateStr := d.Format("2006-01-02")
-		
+
 		// Jangan denda Alpha jika tanggalnya sebelum user bergabung/dibuat
 		if dateStr < emp.CreatedAt.Format("2006-01-02") {
 			continue
@@ -618,14 +618,14 @@ func UpdateAttendanceSettings(c *gin.Context) {
 	adminUser := userCtx.(models.User)
 
 	var body struct {
-		CheckInStart      string                   `json:"check_in_start"`
-		CheckInEnd        string                   `json:"check_in_end"`
-		CheckOutStart     string                   `json:"check_out_start"`
-		CheckOutEnd       string                   `json:"check_out_end"`
-		AlphaPenalty      float64                  `json:"alpha_penalty"`
-		LatePenalty       float64                  `json:"late_penalty"`
-		LatePenaltyTiers  []map[string]interface{} `json:"late_penalty_tiers"`
-		WorkDays          string                   `json:"work_days"`
+		CheckInStart     string                   `json:"check_in_start"`
+		CheckInEnd       string                   `json:"check_in_end"`
+		CheckOutStart    string                   `json:"check_out_start"`
+		CheckOutEnd      string                   `json:"check_out_end"`
+		AlphaPenalty     float64                  `json:"alpha_penalty"`
+		LatePenalty      float64                  `json:"late_penalty"`
+		LatePenaltyTiers []map[string]interface{} `json:"late_penalty_tiers"`
+		WorkDays         string                   `json:"work_days"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		utils.Error(c, "Data tidak valid")
@@ -753,6 +753,8 @@ func isTimeInRange(now time.Time, start, end string) bool {
 func getFilterStart(filter string) string {
 	now := time.Now()
 	switch filter {
+	case "today":
+		return now.Format("2006-01-02")
 	case "week":
 		weekday := int(now.Weekday())
 		if weekday == 0 {
@@ -794,4 +796,347 @@ func upsertCheckIn(userID, companyID, date string, checkInTime time.Time, status
 func parseT(dateStr, t string, loc *time.Location) time.Time {
 	parsed, _ := time.ParseInLocation("2006-01-02 15:04", dateStr+" "+t, loc)
 	return parsed
+}
+
+// AdminGetAttendanceYears - Mengambil daftar tahun unik yang memiliki data absensi untuk filter dinamis
+func AdminGetAttendanceYears(c *gin.Context) {
+	userCtx, _ := c.Get("user")
+	adminUser := userCtx.(models.User)
+
+	var years []string
+	// Mengambil 4 karakter pertama dari kolom date (YYYY)
+	err := database.DB.Model(&models.Attendance{}).
+		Where("company_id = ?", adminUser.CompanyID).
+		Select("DISTINCT(SUBSTRING(date, 1, 4)) as year").
+		Order("year desc").
+		Pluck("year", &years).Error
+
+	if err != nil {
+		utils.Error(c, "Gagal mengambil daftar tahun: "+err.Error())
+		return
+	}
+
+	utils.Success(c, "Berhasil mengambil daftar tahun", years)
+}
+
+// AdminGetDetailedDashboardSummary - Mengambil ringkasan detail (Hadir, Telat, Bekerja, Izin/Sakit, dll)
+// Mendukung filter: month, year, atau default (today)
+func AdminGetDetailedDashboardSummary(c *gin.Context) {
+	userCtx, _ := c.Get("user")
+	adminUser := userCtx.(models.User)
+
+	filter := c.Query("filter")
+	monthS := c.Query("month")
+	yearS := c.Query("year")
+
+	now := time.Now()
+	loc := now.Location()
+	today := now.Format("2006-01-02")
+
+	// 1. Tentukan Rentang Tanggal
+	var start, end string
+	if filter == "month" && monthS != "" && yearS != "" {
+		mInt, _ := strconv.Atoi(monthS)
+		yInt, _ := strconv.Atoi(yearS)
+		firstDay := time.Date(yInt, time.Month(mInt), 1, 0, 0, 0, 0, loc)
+		lastDay := firstDay.AddDate(0, 1, -1)
+		start = firstDay.Format("2006-01-02")
+		end = lastDay.Format("2006-01-02")
+		// Jika bulan ini, batasi end sampai hari ini
+		if end > today {
+			end = today
+		}
+	} else if filter == "year" && yearS != "" {
+		yInt, _ := strconv.Atoi(yearS)
+		start = fmt.Sprintf("%d-01-01", yInt)
+		end = fmt.Sprintf("%d-12-31", yInt)
+		if end > today {
+			end = today
+		}
+	} else if filter == "week" {
+		start = getFilterStart("week")
+		end = today
+	} else {
+		// Default: today
+		start = today
+		end = today
+	}
+
+	// 2. Ambil Karyawan Aktif
+	var employees []models.User
+	database.DB.Where("company_id = ? AND role = ? AND status = ?", adminUser.CompanyID, "EMPLOYEE", "ACTIVE").Find(&employees)
+	totalEmp := len(employees)
+
+	// 3. Ambil Pengaturan
+	var settings models.AttendanceSettings
+	database.DB.Where("company_id = ?", adminUser.CompanyID).First(&settings)
+	checkOutEndT := parseT(today, settings.CheckOutEnd, loc)
+
+	// 4. Ambil Records & Mapping
+	var records []models.Attendance
+	database.DB.Where("company_id = ? AND date >= ? AND date <= ?", adminUser.CompanyID, start, end).Find(&records)
+
+	recordMap := make(map[string]map[string]models.Attendance)
+	for _, r := range records {
+		if recordMap[r.Date] == nil {
+			recordMap[r.Date] = make(map[string]models.Attendance)
+		}
+		recordMap[r.Date][r.UserID] = r
+	}
+
+	summary := map[string]int{
+		"present":     0,
+		"late":        0,
+		"working":     0,
+		"leave_sick":  0,
+		"not_yet":     0,
+		"absent":      0,
+		"early_leave": 0,
+		"total":       totalEmp,
+	}
+
+	// 5. Iterasi Hari & Karyawan (Logika yang sama dengan History agar Konsisten)
+	curr, _ := time.ParseInLocation("2006-01-02", start, loc)
+	limit, _ := time.ParseInLocation("2006-01-02", end, loc)
+
+	for !curr.After(limit) {
+		dateStr := curr.Format("2006-01-02")
+
+		for _, emp := range employees {
+			att, exists := recordMap[dateStr][emp.ID]
+
+			if exists {
+				s := strings.ToUpper(att.Status)
+				if s == "PRESENT" {
+					summary["present"]++
+					if att.CheckOutTime == nil && dateStr == today && now.Before(checkOutEndT) {
+						summary["working"]++
+					}
+				} else if s == "LATE" {
+					summary["late"]++
+					if att.CheckOutTime == nil && dateStr == today && now.Before(checkOutEndT) {
+						summary["working"]++
+					}
+				} else if s == "LEAVE" || s == "SICK" {
+					summary["leave_sick"]++
+				} else if s == "ABSENT" {
+					summary["absent"]++
+				} else if s == "EARLY_LEAVE" {
+					summary["early_leave"]++
+				}
+			} else {
+				// Cegah hitung sebelum karyawan terdaftar
+				regDate := emp.CreatedAt.In(loc).Format("2006-01-02")
+				if dateStr < regDate {
+					continue
+				}
+
+				isAlpha := false
+				if dateStr < today {
+					isAlpha = true
+				} else if dateStr == today && now.After(checkOutEndT) {
+					isAlpha = true
+				}
+
+				if filter == "today" || (start == today && end == today) {
+					if isAlpha {
+						summary["absent"]++
+					} else {
+						summary["not_yet"]++
+					}
+				} else {
+					// Untuk agregat (Week/Month/Year), hari yang lewat tanpa absen adalah Alpha
+					if isAlpha {
+						summary["absent"]++
+					}
+				}
+			}
+		}
+		curr = curr.AddDate(0, 0, 1)
+	}
+
+	utils.Success(c, "Berhasil mengambil ringkasan detail", summary)
+}
+
+// AdminGetAttendanceTrend - Mengambil tren persentase kehadiran berdasarkan filter
+func AdminGetAttendanceTrend(c *gin.Context) {
+	userCtx, _ := c.Get("user")
+	adminUser := userCtx.(models.User)
+
+	filter := c.DefaultQuery("filter", "week") // week, month, year
+	month := c.Query("month")
+	year := c.Query("year")
+
+	var labels []string
+	var presentData, lateData, absentData, leaveSickData, earlyLeaveData []float64
+
+	now := time.Now()
+	loc := now.Location()
+
+	var employees []models.User
+	database.DB.Model(&models.User{}).Where("company_id = ? AND role = ? AND status = ?", adminUser.CompanyID, "EMPLOYEE", "ACTIVE").Find(&employees)
+	totalEmp := len(employees)
+
+	today := now.Format("2006-01-02")
+	var settings models.AttendanceSettings
+	database.DB.Where("company_id = ?", adminUser.CompanyID).First(&settings)
+	checkOutEndT := parseT(today, settings.CheckOutEnd, loc)
+
+	if totalEmp == 0 {
+		utils.Success(c, "Trend data (empty)", gin.H{
+			"labels": []string{},
+			"present": []float64{}, "late": []float64{}, "absent": []float64{}, "leave_sick": []float64{}, "early_leave": []float64{},
+		})
+		return
+	}
+
+	if filter == "year" && year != "" {
+		for m := 1; m <= 12; m++ {
+			labels = append(labels, time.Month(m).String()[:3])
+			pattern := fmt.Sprintf("%s-%02d%%", year, m)
+
+			var p, l, ls, el int64
+			database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date LIKE ? AND status = 'PRESENT'", adminUser.CompanyID, pattern).Count(&p)
+			database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date LIKE ? AND status = 'LATE'", adminUser.CompanyID, pattern).Count(&l)
+			database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date LIKE ? AND (status = 'LEAVE' OR status = 'SICK')", adminUser.CompanyID, pattern).Count(&ls)
+			database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date LIKE ? AND status = 'EARLY_LEAVE'", adminUser.CompanyID, pattern).Count(&el)
+
+			// Untuk tahunan, Alpha dihitung per bulan: (TotalEmp * hari_kerja_per_bulan) - total_absen? 
+            // Agak kompleks tanpa calendar. Sederhananya, kita akumulasi Alpha harian untuk bulan tersebut.
+            var a int64
+            // Ambil semua records bulan ini untuk menghitung alpha harian secara akurat
+            var monthRecords []models.Attendance
+            database.DB.Where("company_id = ? AND date LIKE ?", adminUser.CompanyID, pattern).Find(&monthRecords)
+            
+            // Map: date -> user_id -> struct{}
+            mRecordMap := make(map[string]map[string]bool)
+            for _, r := range monthRecords {
+                if mRecordMap[r.Date] == nil { mRecordMap[r.Date] = make(map[string]bool) }
+                mRecordMap[r.Date][r.UserID] = true
+            }
+
+            // Iterasi hari dalam bulan m
+            yInt, _ := strconv.Atoi(year)
+            firstDay := time.Date(yInt, time.Month(m), 1, 0, 0, 0, 0, loc)
+            lastDay := firstDay.AddDate(0, 1, -1)
+            if lastDay.After(now) { lastDay = now }
+
+            for d := firstDay; !d.After(lastDay); d = d.AddDate(0, 0, 1) {
+                dateStr := d.Format("2006-01-02")
+                for _, emp := range employees {
+                    regDate := emp.CreatedAt.In(loc).Format("2006-01-02")
+                    if dateStr < regDate { continue }
+                    if !mRecordMap[dateStr][emp.ID] {
+                        // Jika hari terlewati, Alpha
+                        if dateStr < today || (dateStr == today && now.After(checkOutEndT)) {
+                            a++
+                        }
+                    }
+                }
+            }
+
+			presentData = append(presentData, float64(p))
+			lateData = append(lateData, float64(l))
+			absentData = append(absentData, float64(a))
+			leaveSickData = append(leaveSickData, float64(ls))
+			earlyLeaveData = append(earlyLeaveData, float64(el))
+		}
+	} else if filter == "month" && month != "" && year != "" {
+		yInt, _ := strconv.Atoi(year)
+		mInt, _ := strconv.Atoi(month)
+		firstDay := time.Date(yInt, time.Month(mInt), 1, 0, 0, 0, 0, loc)
+		lastDay := firstDay.AddDate(0, 1, -1)
+        if lastDay.After(now) { lastDay = now }
+
+		for d := firstDay; !d.After(lastDay); d = d.AddDate(0, 0, 1) {
+			dateStr := d.Format("2006-01-02")
+			labels = append(labels, d.Format("02"))
+
+			var p, l, ls, el int64
+			database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date = ? AND status = 'PRESENT'", adminUser.CompanyID, dateStr).Count(&p)
+			database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date = ? AND status = 'LATE'", adminUser.CompanyID, dateStr).Count(&l)
+			database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date = ? AND (status = 'LEAVE' OR status = 'SICK')", adminUser.CompanyID, dateStr).Count(&ls)
+			database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date = ? AND status = 'EARLY_LEAVE'", adminUser.CompanyID, dateStr).Count(&el)
+
+            // Hitung Alpha (Gunakan logika yang sama: Hari lewat + tidak terdaftar record)
+            var a int64
+            var dailyRecords []string
+            database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date = ?", adminUser.CompanyID, dateStr).Pluck("user_id", &dailyRecords)
+            dMap := make(map[string]bool)
+            for _, uid := range dailyRecords { dMap[uid] = true }
+
+            for _, emp := range employees {
+                regDate := emp.CreatedAt.In(loc).Format("2006-01-02")
+                if dateStr < regDate { continue }
+                if !dMap[emp.ID] {
+                   if dateStr < today || (dateStr == today && now.After(checkOutEndT)) { a++ }
+                }
+            }
+
+			presentData = append(presentData, float64(p))
+			lateData = append(lateData, float64(l))
+			absentData = append(absentData, float64(a))
+			leaveSickData = append(leaveSickData, float64(ls))
+			earlyLeaveData = append(earlyLeaveData, float64(el))
+		}
+	} else if filter == "today" {
+		for h := 6; h <= 18; h++ {
+			label := fmt.Sprintf("%02d:00", h)
+			labels = append(labels, label)
+			hourPattern := fmt.Sprintf("%% %02d:%%", h)
+
+			var p, l, ls, el int64
+			database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date = ? AND check_in_time::text LIKE ? AND status = 'PRESENT'", adminUser.CompanyID, today, hourPattern).Count(&p)
+			database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date = ? AND check_in_time::text LIKE ? AND status = 'LATE'", adminUser.CompanyID, today, hourPattern).Count(&l)
+			database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date = ? AND check_in_time::text LIKE ? AND (status = 'LEAVE' OR status = 'SICK')", adminUser.CompanyID, today, hourPattern).Count(&ls)
+			database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date = ? AND check_in_time::text LIKE ? AND status = 'EARLY_LEAVE'", adminUser.CompanyID, today, hourPattern).Count(&el)
+
+			presentData = append(presentData, float64(p))
+			lateData = append(lateData, float64(l))
+			absentData = append(absentData, float64(0)) // Untuk hari ini tren alpha tidak relevan per jam
+			leaveSickData = append(leaveSickData, float64(ls))
+			earlyLeaveData = append(earlyLeaveData, float64(el))
+		}
+	} else {
+		for i := 6; i >= 0; i-- {
+			d := now.AddDate(0, 0, -i)
+			dateStr := d.Format("2006-01-02")
+			labels = append(labels, d.Format("Mon"))
+
+			var p, l, ls, el int64
+			database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date = ? AND status = 'PRESENT'", adminUser.CompanyID, dateStr).Count(&p)
+			database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date = ? AND status = 'LATE'", adminUser.CompanyID, dateStr).Count(&l)
+			database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date = ? AND (status = 'LEAVE' OR status = 'SICK')", adminUser.CompanyID, dateStr).Count(&ls)
+			database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date = ? AND status = 'EARLY_LEAVE'", adminUser.CompanyID, dateStr).Count(&el)
+
+            var a int64
+            var weeklyRecords []string
+            database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date = ?", adminUser.CompanyID, dateStr).Pluck("user_id", &weeklyRecords)
+            dMap := make(map[string]bool)
+            for _, uid := range weeklyRecords { dMap[uid] = true }
+
+            for _, emp := range employees {
+                regDate := emp.CreatedAt.In(loc).Format("2006-01-02")
+                if dateStr < regDate { continue }
+                if !dMap[emp.ID] {
+                   if dateStr < today || (dateStr == today && now.After(checkOutEndT)) { a++ }
+                }
+            }
+
+			presentData = append(presentData, float64(p))
+			lateData = append(lateData, float64(l))
+			absentData = append(absentData, float64(a))
+			leaveSickData = append(leaveSickData, float64(ls))
+			earlyLeaveData = append(earlyLeaveData, float64(el))
+		}
+	}
+
+	utils.Success(c, "Data tren kehadiran", gin.H{
+		"labels":      labels,
+		"present":     presentData,
+		"late":        lateData,
+		"absent":      absentData,
+		"leave_sick":  leaveSickData,
+		"early_leave": earlyLeaveData,
+	})
 }
