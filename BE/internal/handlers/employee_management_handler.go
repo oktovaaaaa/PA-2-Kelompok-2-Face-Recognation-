@@ -42,7 +42,7 @@ func GetEmployees(c *gin.Context) {
 	}
 	query.Find(&users)
 
-	var result []EmployeeWithPosition
+	result := []EmployeeWithPosition{}
 	for _, u := range users {
 		ep := EmployeeWithPosition{
 			ID:         u.ID,

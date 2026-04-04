@@ -41,6 +41,12 @@ const AttendanceCharts = ({ period, month, year }: AttendanceChartsProps) => {
   const [stats, setStats] = useState<any>(null)
   const [trendData, setTrendData] = useState<any>({ labels: [], data: [] })
 
+  // Define explicit theme colors to avoid ApexCharts processing errors
+  const isDark = theme.palette.mode === 'dark'
+  const textColorPrimary = isDark ? '#E2E8F0' : '#475569'
+  const textColorSecondary = isDark ? '#94A3B8' : '#64748B'
+  const textColorMuted = isDark ? '#64748B' : '#94A3B8'
+
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -89,8 +95,9 @@ const AttendanceCharts = ({ period, month, year }: AttendanceChartsProps) => {
     ],
     legend: { 
       position: 'bottom',
-      fontSize: '12px',
-      markers: { radius: 2 }
+      fontSize: '13px',
+      markers: { radius: 2 },
+      labels: { colors: textColorPrimary }
     },
     stroke: { show: false },
     dataLabels: { enabled: false },
@@ -100,9 +107,25 @@ const AttendanceCharts = ({ period, month, year }: AttendanceChartsProps) => {
           size: '75%',
           labels: {
             show: true,
+            name: {
+              show: true,
+              fontSize: '14px',
+              color: textColorSecondary,
+              offsetY: -10
+            },
+            value: {
+              show: true,
+              fontSize: '22px',
+              fontWeight: 600,
+              color: textColorPrimary,
+              offsetY: 4,
+              formatter: (val: string) => val
+            },
             total: {
                 show: true,
                 label: 'Karyawan',
+                fontSize: '14px',
+                color: textColorSecondary,
                 formatter: () => stats?.total || 0
             }
           }
@@ -146,15 +169,28 @@ const AttendanceCharts = ({ period, month, year }: AttendanceChartsProps) => {
     xaxis: { 
         categories: trendData.labels || [],
         axisBorder: { show: false },
-        axisTicks: { show: false }
+        axisTicks: { show: false },
+        labels: {
+          style: { colors: textColorSecondary, fontSize: '12px' }
+        }
     },
     yaxis: {
         min: 0,
         forceNiceScale: true,
-        labels: { formatter: (val: number) => Math.round(val) }
+        labels: { 
+          style: { colors: textColorSecondary, fontSize: '12px' },
+          formatter: (val: number) => Math.round(val) 
+        }
     },
-    tooltip: { y: { formatter: (val: number) => `${val} Karyawan` } },
-    legend: { position: 'top', horizontalAlign: 'right' }
+    tooltip: { 
+      theme: isDark ? 'dark' : 'light',
+      y: { formatter: (val: number) => `${val} Karyawan` } 
+    },
+    legend: { 
+      position: 'top', 
+      horizontalAlign: 'right',
+      labels: { colors: textColorPrimary }
+    }
   }
 
   const getTrendTitle = () => {
@@ -185,9 +221,9 @@ const AttendanceCharts = ({ period, month, year }: AttendanceChartsProps) => {
                         <div key={idx} className="flex items-center justify-between">
                             <div className="flex items-center gap-3">
                                 <span style={{ width: 12, height: 12, borderRadius: '2px', backgroundColor: item.color }}></span>
-                                <Typography variant="body2" color="text.primary">{item.label}</Typography>
+                                <Typography variant="body2" sx={{ color: textColorPrimary }}>{item.label}</Typography>
                             </div>
-                            <Typography variant="body2" fontWeight="bold">{item.count}</Typography>
+                            <Typography variant="body2" fontWeight="bold" sx={{ color: textColorPrimary }}>{item.count}</Typography>
                         </div>
                     ))}
                  </div>

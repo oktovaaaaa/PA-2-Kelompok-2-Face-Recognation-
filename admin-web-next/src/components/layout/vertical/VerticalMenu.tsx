@@ -71,7 +71,7 @@ const VerticalMenu = ({ scrollMenu }: { scrollMenu: (container: any, isPerfectSc
 
         <MenuSection label='Manajemen SDM'>
           <MenuItem href='/karyawan' icon={<i className='ri-user-line' />}>
-            Master Karyawan
+            Data Karyawan
           </MenuItem>
           <MenuItem href='/jabatan' icon={<i className='ri-briefcase-line' />}>
             Manajemen Jabatan

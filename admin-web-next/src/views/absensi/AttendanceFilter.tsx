@@ -57,7 +57,7 @@ const AttendanceFilter = ({
   }, [])
 
   return (
-    <Card sx={{ mb: 6, border: '1px solid', borderColor: 'divider', boxShadow: 'none', background: 'transparent' }}>
+    <Card sx={{ mb: 6, border: '1px solid', borderColor: 'divider' }}>
       <CardContent>
         <Grid container spacing={6} alignItems="center">
           <Grid item xs={12} lg={5}>
