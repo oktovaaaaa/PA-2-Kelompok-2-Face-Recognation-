@@ -95,6 +95,7 @@ func SetupRouter() *gin.Engine {
 
 		// Perizinan karyawan
 		admin.GET("/leaves", handlers.AdminGetLeaveRequests)
+		admin.POST("/leaves", handlers.AdminCreateLeave)
 		admin.PUT("/leaves/:id/approve", handlers.ApproveLeave)
 		admin.PUT("/leaves/:id/reject", handlers.RejectLeave)
 		admin.DELETE("/leaves/:id", handlers.AdminDeleteLeave)

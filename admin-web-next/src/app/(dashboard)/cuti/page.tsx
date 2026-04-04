@@ -1,4 +1,8 @@
-import ComingSoon from '@components/ComingSoon'
+// src/app/(dashboard)/cuti/page.tsx
+'use client'
+
+import LeavePage from '@views/cuti/LeavePage'
+
 export default function cutiPage() {
-  return <ComingSoon title='Modul ' />
+  return <LeavePage />
 }

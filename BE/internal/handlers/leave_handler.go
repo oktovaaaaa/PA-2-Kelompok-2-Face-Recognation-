@@ -7,6 +7,7 @@ import (
 	"employee-system/internal/models"
 	"employee-system/internal/services"
 	"employee-system/internal/utils"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -152,6 +153,59 @@ func AdminDeleteLeave(c *gin.Context) {
 	}
 
 	utils.Success(c, "Izin dihapus", nil)
+}
+
+// AdminCreateLeave — admin membuatkan izin untuk karyawan tertentu
+func AdminCreateLeave(c *gin.Context) {
+	userCtx, _ := c.Get("user")
+	adminUser := userCtx.(models.User)
+
+	var body struct {
+		UserID          string `json:"user_id"`
+		Type            string `json:"type"`
+		Title           string `json:"title"`
+		Description     string `json:"description"`
+		Date            string `json:"date"` // format YYYY-MM-DD
+		Status          string `json:"status"` // PENDING/APPROVED
+	}
+	if err := c.ShouldBindJSON(&body); err != nil || body.UserID == "" || body.Type == "" || body.Date == "" {
+		utils.Error(c, "Data tidak lengkap")
+		return
+	}
+
+	// Parsing tanggal untuk CreatedAt
+	parsedDate, _ := time.Parse("2006-01-02", body.Date)
+
+	leave := models.LeaveRequest{
+		ID:              uuid.New().String(),
+		UserID:          body.UserID,
+		CompanyID:       adminUser.CompanyID,
+		Type:            body.Type,
+		Title:           body.Title,
+		Description:     body.Description,
+		Status:          body.Status,
+		ConfirmedHonest: true,
+	}
+	// override created_at if provided to match the calendar date
+	if !parsedDate.IsZero() {
+		leave.CreatedAt = parsedDate
+	}
+
+	if err := database.DB.Create(&leave).Error; err != nil {
+		utils.Error(c, "Gagal menambahkan izin")
+		return
+	}
+
+	// Jika langsung APPROVED, update attendance
+	if body.Status == "APPROVED" {
+		attendanceStatus := "LEAVE"
+		if body.Type == "SAKIT" {
+			attendanceStatus = "SICK"
+		}
+		upsertAttendance(body.UserID, adminUser.CompanyID, body.Date, attendanceStatus)
+	}
+
+	utils.Success(c, "Izin berhasil ditambahkan oleh admin", leave)
 }
 
 // ===== EMPLOYEE HANDLERS =====
