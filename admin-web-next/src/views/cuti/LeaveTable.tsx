@@ -1,7 +1,7 @@
 // src/views/cuti/LeaveTable.tsx
 'use client'
 
-import React from 'react'
+import React, { useState } from 'react'
 import Card from '@mui/material/Card'
 import Table from '@mui/material/Table'
 import TableBody from '@mui/material/TableBody'
@@ -15,6 +15,7 @@ import Typography from '@mui/material/Typography'
 import IconButton from '@mui/material/IconButton'
 import Box from '@mui/material/Box'
 import Avatar from '@mui/material/Avatar'
+import TablePagination from '@mui/material/TablePagination'
 import { LeaveRequest } from '@/libs/leaveService'
 import { format } from 'date-fns'
 
@@ -25,6 +26,18 @@ interface Props {
 }
 
 const LeaveTable = ({ leaves, onView, onDelete }: Props) => {
+  const [page, setPage] = useState(0)
+  const [rowsPerPage, setRowsPerPage] = useState(10)
+
+  const handleChangePage = (event: unknown, newPage: number) => {
+    setPage(newPage)
+  }
+
+  const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setRowsPerPage(parseInt(event.target.value, 10))
+    setPage(0)
+  }
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'APPROVED': return 'success'
@@ -43,6 +56,8 @@ const LeaveTable = ({ leaves, onView, onDelete }: Props) => {
     }
   }
 
+  const paginatedLeaves = leaves.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+
   return (
     <Card sx={{ mt: 6 }}>
       <TableContainer component={Paper} elevation={0}>
@@ -58,14 +73,14 @@ const LeaveTable = ({ leaves, onView, onDelete }: Props) => {
             </TableRow>
           </TableHead>
           <TableBody>
-            {leaves.length === 0 ? (
+            {paginatedLeaves.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} align='center' sx={{ py: 10 }}>
                   <Typography color='textSecondary'>Tidak ada data pengajuan izin.</Typography>
                 </TableCell>
               </TableRow>
             ) : (
-              leaves.map((row) => (
+              paginatedLeaves.map((row) => (
                 <TableRow key={row.id} hover onClick={() => onView(row)} sx={{ cursor: 'pointer' }}>
                   <TableCell>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 3 }}>
@@ -117,6 +132,16 @@ const LeaveTable = ({ leaves, onView, onDelete }: Props) => {
           </TableBody>
         </Table>
       </TableContainer>
+      <TablePagination
+        rowsPerPageOptions={[5, 10, 25]}
+        component='div'
+        count={leaves.length}
+        rowsPerPage={rowsPerPage}
+        page={page}
+        onPageChange={handleChangePage}
+        onRowsPerPageChange={handleChangeRowsPerPage}
+        labelRowsPerPage="Baris per halaman:"
+      />
     </Card>
   )
 }

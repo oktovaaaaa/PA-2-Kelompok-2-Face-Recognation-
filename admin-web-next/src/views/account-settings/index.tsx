@@ -24,14 +24,14 @@ const AccountSettings = ({ tabContentList }: { tabContentList: { [key: string]: 
       <Grid container spacing={6}>
         <Grid item xs={12}>
           <TabList onChange={handleChange} variant='scrollable'>
-            <Tab label='Account' icon={<i className='ri-user-3-line' />} iconPosition='start' value='account' />
+            <Tab label='Akun Pribadi' icon={<i className='ri-user-3-line' />} iconPosition='start' value='account' />
             <Tab
-              label='Notifications'
-              icon={<i className='ri-notification-3-line' />}
+              label='Keamanan'
+              icon={<i className='ri-lock-line' />}
               iconPosition='start'
-              value='notifications'
+              value='security'
             />
-            <Tab label='Connections' icon={<i className='ri-link' />} iconPosition='start' value='connections' />
+            <Tab label='Profil Instansi' icon={<i className='ri-business-center-line' />} iconPosition='start' value='company' />
           </TabList>
         </Grid>
         <Grid item xs={12}>

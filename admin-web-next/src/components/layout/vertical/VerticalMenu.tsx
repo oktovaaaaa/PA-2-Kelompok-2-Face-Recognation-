@@ -79,6 +79,9 @@ const VerticalMenu = ({ scrollMenu }: { scrollMenu: (container: any, isPerfectSc
           <MenuItem href='/cuti' icon={<i className='ri-calendar-event-line' />}>
             Cuti & Izin
           </MenuItem>
+          <MenuItem href='/libur' icon={<i className='ri-calendar-todo-line' />}>
+            Hari Libur
+          </MenuItem>
         </MenuSection>
 
         <MenuSection label='Laporan & Payroll'>
@@ -96,6 +99,9 @@ const VerticalMenu = ({ scrollMenu }: { scrollMenu: (container: any, isPerfectSc
         <MenuSection label='Aplikasi & Halaman'>
           <MenuItem href='/account-settings' icon={<i className='ri-user-settings-line' />}>
             Pengaturan Akun
+          </MenuItem>
+          <MenuItem href='/operasional' icon={<i className='ri-settings-4-line' />}>
+            Pengaturan Operasional
           </MenuItem>
           <MenuItem href='/card-basic' icon={<i className='ri-bar-chart-box-line' />}>
             Kartu Statistik

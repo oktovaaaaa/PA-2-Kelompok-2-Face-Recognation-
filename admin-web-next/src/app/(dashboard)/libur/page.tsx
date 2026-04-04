@@ -1,4 +1,8 @@
-import ComingSoon from '@components/ComingSoon'
-export default function liburPage() {
-  return <ComingSoon title='Modul ' />
+// src/app/(dashboard)/libur/page.tsx
+'use client'
+
+import HolidayPage from '@views/libur/HolidayPage'
+
+export default function holidayPage() {
+  return <HolidayPage />
 }

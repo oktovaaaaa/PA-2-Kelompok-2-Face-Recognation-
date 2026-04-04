@@ -35,7 +35,15 @@ const LeaveRequestModal = ({ open, onClose, selectedDate, onSubmit }: Props) => 
 
   useEffect(() => {
     if (open) {
-      employeeService.getEmployees('ACTIVE').then(setEmployees)
+      employeeService.getEmployees('ACTIVE')
+        .then(setEmployees)
+        .catch(err => {
+          console.error("Gagal mengambil karyawan:", err)
+          // Jika token tidak valid, user mungkin perlu login ulang
+          if (err.message.includes('token')) {
+            // Optional: redirect to login or show alert
+          }
+        })
       if (selectedDate) {
         setFormData(prev => ({ ...prev, date: format(selectedDate, 'yyyy-MM-dd') }))
       }

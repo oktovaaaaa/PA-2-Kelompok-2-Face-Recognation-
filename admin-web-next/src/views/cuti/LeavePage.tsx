@@ -11,9 +11,12 @@ import LeaveCalendar from './LeaveCalendar'
 import LeaveTable from './LeaveTable'
 import LeaveDetailModal from './LeaveDetailModal'
 import LeaveRequestModal from './LeaveRequestModal'
+import ConfirmDialog from '@/components/ConfirmDialog'
 import { leaveService, LeaveRequest } from '@/libs/leaveService'
+import { useNotification } from '@/contexts/NotificationContext'
 
 const LeavePage = () => {
+  const { showNotification } = useNotification()
   const [leaves, setLeaves] = useState<LeaveRequest[]>([])
   const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState({ total: 0, pending: 0, approved: 0, rejected: 0 })
@@ -22,6 +25,8 @@ const LeavePage = () => {
   const [selectedLeave, setSelectedLeave] = useState<LeaveRequest | null>(null)
   const [isDetailOpen, setIsDetailOpen] = useState(false)
   const [isRequestOpen, setIsRequestOpen] = useState(false)
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false)
+  const [confirmConfig, setConfirmConfig] = useState<{title: string, message: string, type: 'warning' | 'error' | 'info', action: () => void} | null>(null)
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
 
   const loadData = useCallback(async () => {
@@ -30,7 +35,6 @@ const LeavePage = () => {
       const data = await leaveService.getLeaves({ year: new Date().getFullYear() })
       setLeaves(data)
       
-      // Calculate stats
       const s = {
         total: data.length,
         pending: data.filter(l => l.status === 'PENDING').length,
@@ -55,31 +59,51 @@ const LeavePage = () => {
   }
 
   const handleProcessLeave = async (id: string, action: 'approve' | 'reject', note: string) => {
-    try {
-      if (action === 'approve') await leaveService.approveLeave(id, note)
-      else await leaveService.rejectLeave(id, note)
-      
-      setIsDetailOpen(false)
-      loadData()
-    } catch (error) {
-      console.error(error)
-    }
+    setConfirmConfig({
+        title: action === 'approve' ? 'Setujui Pengajuan' : 'Tolak Pengajuan',
+        message: `Apakah Anda yakin ingin ${action === 'approve' ? 'menyetujui' : 'menolak'} pengajuan ini?`,
+        type: action === 'approve' ? 'info' : 'warning',
+        action: async () => {
+            try {
+                if (action === 'approve') await leaveService.approveLeave(id, note)
+                else await leaveService.rejectLeave(id, note)
+                showNotification(`Pengajuan berhasil ${action === 'approve' ? 'disetujui' : 'ditolak'}.`, 'success')
+                setIsDetailOpen(false)
+                loadData()
+            } catch (error) {
+                showNotification('Gagal memproses pengajuan.', 'error')
+            }
+        }
+    })
+    setIsConfirmOpen(true)
   }
 
   const handleDeleteLeave = async (id: string) => {
-    if (window.confirm('Hapus data pengajuan ini?')) {
-      await leaveService.deleteLeave(id)
-      loadData()
-    }
+    setConfirmConfig({
+        title: 'Hapus Pengajuan',
+        message: 'Apakah Anda yakin ingin menghapus data pengajuan ini secara permanen?',
+        type: 'error',
+        action: async () => {
+            try {
+                await leaveService.deleteLeave(id)
+                showNotification('Data pengajuan telah dihapus.', 'success')
+                loadData()
+            } catch (error) {
+                showNotification('Gagal menghapus pengajuan.', 'error')
+            }
+        }
+    })
+    setIsConfirmOpen(true)
   }
 
   const handleCreateLeave = async (formData: any) => {
     try {
       await leaveService.createLeave(formData)
+      showNotification('Izin/Cuti berhasil ditambahkan!', 'success')
       setIsRequestOpen(false)
       loadData()
     } catch (error) {
-      console.error(error)
+      showNotification('Gagal menambahkan izin/cuti.', 'error')
     }
   }
 
@@ -122,7 +146,7 @@ const LeavePage = () => {
         </Grid>
       </Grid>
 
-      {/* Modals */}
+      {/* Modals & Dialogs */}
       <LeaveDetailModal 
         open={isDetailOpen}
         onClose={() => setIsDetailOpen(false)}
@@ -135,6 +159,15 @@ const LeavePage = () => {
         onClose={() => setIsRequestOpen(false)}
         selectedDate={selectedDate}
         onSubmit={handleCreateLeave}
+      />
+
+      <ConfirmDialog 
+        open={isConfirmOpen}
+        onClose={() => setIsConfirmOpen(false)}
+        onConfirm={confirmConfig?.action || (() => {})}
+        title={confirmConfig?.title || ''}
+        message={confirmConfig?.message || ''}
+        type={confirmConfig?.type}
       />
     </Box>
   )
