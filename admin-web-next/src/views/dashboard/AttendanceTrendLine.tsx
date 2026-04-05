@@ -40,7 +40,7 @@ const AttendanceTrendLine = ({ trend }: Props) => {
         formatter: (val: number) => Math.round(val).toString()
       }
     },
-    colors: ['#4CAF50', '#FF9800', '#F44336', '#03A9F4', '#9C27B0'],
+    colors: ['#22C55E', '#FBBF24', '#EF4444', '#0EA5E9', '#F97316', '#D946EF'],
     stroke: { curve: 'smooth', width: 3 },
     fill: {
       type: 'gradient',
@@ -75,7 +75,8 @@ const AttendanceTrendLine = ({ trend }: Props) => {
     { name: 'Terlambat', data: trend?.late || [] },
     { name: 'Alpha', data: trend?.absent || [] },
     { name: 'Izin/Sakit', data: trend?.leave_sick || [] },
-    { name: 'Pulang Awal', data: trend?.early_leave || [] }
+    { name: 'Pulang di jam kerja', data: trend?.early_leave || [] },
+    { name: 'Terlambat & Pulang di jam kerja', data: trend?.late_early_leave || [] }
   ]
 
   return (

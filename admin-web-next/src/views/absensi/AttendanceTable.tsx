@@ -85,6 +85,7 @@ const AttendanceTable = ({ parentPeriod, parentMonth, parentYear }: AttendanceTa
       case 'WORKING': return 'Sedang Bekerja'
       case 'NOT_YET': return 'Belum Hadir'
       case 'EARLY_LEAVE': return 'Pulang di Jam Kerja'
+      case 'LATE_EARLY_LEAVE': return 'Terlambat & Pulang di Jam Kerja'
       case 'LEAVE': return 'Izin'
       case 'SICK': return 'Sakit'
       default: return status
@@ -98,7 +99,8 @@ const AttendanceTable = ({ parentPeriod, parentMonth, parentYear }: AttendanceTa
       case 'ABSENT': return 'EF4444'
       case 'WORKING': return '818CF8'
       case 'NOT_YET': return '94A3B8'
-      case 'EARLY_LEAVE': return '8B5CF6'
+      case 'EARLY_LEAVE': return 'F97316'
+      case 'LATE_EARLY_LEAVE': return 'D946EF'
       default: return '64748B'
     }
   }
@@ -163,6 +165,7 @@ const AttendanceTable = ({ parentPeriod, parentMonth, parentYear }: AttendanceTa
         { key: 'WORKING', label: 'Sedang Bekerja' },
         { key: 'NOT_YET', label: 'Belum Hadir' },
         { key: 'EARLY_LEAVE', label: 'Pulang di Jam Kerja' },
+        { key: 'LATE_EARLY_LEAVE', label: 'Terlambat & Pulang di Jam Kerja' },
     ]
 
     summaryKeys.forEach(s => {
@@ -257,6 +260,8 @@ const AttendanceTable = ({ parentPeriod, parentMonth, parentYear }: AttendanceTa
       case 'SICK': return 'info'
       case 'ABSENT': return 'error'
       case 'WORKING': return 'primary'
+      case 'LATE_EARLY_LEAVE': return 'secondary'
+      case 'EARLY_LEAVE': return 'warning'
       default: return 'secondary'
     }
   }
@@ -321,7 +326,8 @@ const AttendanceTable = ({ parentPeriod, parentMonth, parentYear }: AttendanceTa
                         { val: 'LEAVE', label: 'Izin' },
                         { val: 'SICK', label: 'Sakit' },
                         { val: 'WORKING', label: 'Sedang Bekerja' },
-                        { val: 'EARLY_LEAVE', label: 'Pulang di Jam Kerja' }
+                        { val: 'EARLY_LEAVE', label: 'Pulang di Jam Kerja' },
+                        { val: 'LATE_EARLY_LEAVE', label: 'Terlambat & Pulang di Jam Kerja' }
                     ].map((s) => (
                         <Chip 
                             key={s.val}
@@ -383,12 +389,20 @@ const AttendanceTable = ({ parentPeriod, parentMonth, parentYear }: AttendanceTa
                             row.status === 'SICK' ? 'Sakit' : 
                             row.status === 'WORKING' ? 'Sedang Bekerja' : 
                             row.status === 'EARLY_LEAVE' ? 'Pulang di Jam Kerja' : 
+                            row.status === 'LATE_EARLY_LEAVE' ? 'Terlambat & Pulang di Jam Kerja' : 
                             row.status === 'NOT_YET' ? 'Belum Hadir' : row.status
                         } 
                         size='small' 
                         color={getStatusColor(row.status) as any} 
                         variant='tonal'
-                        sx={{ minWidth: 90 }} 
+                        sx={{ 
+                            minWidth: 90,
+                            ...(row.status === 'LATE_EARLY_LEAVE' && { 
+                                backgroundColor: 'rgba(217, 70, 239, 0.16) !important', 
+                                color: '#D946EF !important',
+                                border: '1px solid rgba(217, 70, 239, 0.5)'
+                            }) 
+                        }} 
                       />
                     </TableCell>
                   </TableRow>

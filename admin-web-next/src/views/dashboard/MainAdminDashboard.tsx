@@ -10,6 +10,7 @@ import Button from '@mui/material/Button'
 import Box from '@mui/material/Box'
 import CircularProgress from '@mui/material/CircularProgress'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { dashboardService, DashboardSummary, AttendanceTrend } from '@/libs/dashboardService'
 import InviteQRModal from './InviteQRModal'
 import { formatImageUrl, settingService, Profile } from '@/libs/settingService'
@@ -112,14 +113,16 @@ const MainAdminDashboard = () => {
             <Grid item xs={12}>
                 <Box className='grid grid-cols-2 sm:grid-cols-4 gap-4'>
                     {quickActions.map((action, idx) => (
-                        <Card key={idx} className='shadow-md rounded-2xl border-none hover:translate-y-[-4px] transition-all cursor-pointer' onClick={() => router.push(action.url)}>
-                            <CardContent className='p-4 flex flex-col items-center gap-3'>
-                                <Box className={`p-4 rounded-full ${action.color}`}>
-                                    <i className={`${action.icon} text-2xl`} />
-                                </Box>
-                                <Typography className='font-bold text-xs uppercase tracking-wider text-slate-700'>{action.label}</Typography>
-                            </CardContent>
-                        </Card>
+                        <Link key={idx} href={action.url} className='block no-underline'>
+                            <Card className='shadow-md rounded-2xl border-none hover:translate-y-[-4px] transition-all cursor-pointer'>
+                                <CardContent className='p-4 flex flex-col items-center gap-3'>
+                                    <Box className={`p-4 rounded-full ${action.color}`}>
+                                        <i className={`${action.icon} text-2xl`} />
+                                    </Box>
+                                    <Typography className='font-bold text-xs uppercase tracking-wider text-slate-700'>{action.label}</Typography>
+                                </CardContent>
+                            </Card>
+                        </Link>
                     ))}
                 </Box>
             </Grid>
@@ -128,30 +131,34 @@ const MainAdminDashboard = () => {
             <Grid item xs={12} md={8}>
                 <Grid container spacing={4}>
                     <Grid item xs={12} sm={6}>
-                         <Card className='shadow-lg rounded-2xl border-none h-full hover:shadow-xl transition-all cursor-pointer' onClick={() => router.push('/absensi')}>
-                            <CardContent className='flex items-center gap-5'>
-                                <Box className='bg-purple-100 p-4 rounded-xl text-purple-600'>
-                                    <i className='ri-file-list-3-line text-2xl' />
-                                </Box>
-                                <Box>
-                                    <Typography className='font-bold text-slate-800'>Laporan Kehadiran</Typography>
-                                    <Typography variant='caption' className='text-slate-400'>Ekspor Excel & Riwayat Lengkap</Typography>
-                                </Box>
-                            </CardContent>
-                         </Card>
+                         <Link href='/absensi' className='block no-underline h-full'>
+                            <Card className='shadow-lg rounded-2xl border-none h-full hover:shadow-xl transition-all cursor-pointer'>
+                                <CardContent className='flex items-center gap-5'>
+                                    <Box className='bg-purple-100 p-4 rounded-xl text-purple-600'>
+                                        <i className='ri-file-list-3-line text-2xl' />
+                                    </Box>
+                                    <Box>
+                                        <Typography className='font-bold text-slate-800'>Laporan Kehadiran</Typography>
+                                        <Typography variant='caption' className='text-slate-400'>Ekspor Excel & Riwayat Lengkap</Typography>
+                                    </Box>
+                                </CardContent>
+                            </Card>
+                         </Link>
                     </Grid>
                     <Grid item xs={12} sm={6}>
-                         <Card className='shadow-lg rounded-2xl border-none h-full hover:shadow-xl transition-all cursor-pointer' onClick={() => router.push('/payroll')}>
-                            <CardContent className='flex items-center gap-5'>
-                                <Box className='bg-emerald-100 p-4 rounded-xl text-emerald-600'>
-                                    <i className='ri-money-dollar-box-line text-2xl' />
-                                </Box>
-                                <Box>
-                                    <Typography className='font-bold text-slate-800'>Manajemen Gaji</Typography>
-                                    <Typography variant='caption' className='text-slate-400'>Proses Pembayaran & Potongan</Typography>
-                                </Box>
-                            </CardContent>
-                         </Card>
+                         <Link href='/payroll' className='block no-underline h-full'>
+                            <Card className='shadow-lg rounded-2xl border-none h-full hover:shadow-xl transition-all cursor-pointer'>
+                                <CardContent className='flex items-center gap-5'>
+                                    <Box className='bg-emerald-100 p-4 rounded-xl text-emerald-600'>
+                                        <i className='ri-money-dollar-box-line text-2xl' />
+                                    </Box>
+                                    <Box>
+                                        <Typography className='font-bold text-slate-800'>Manajemen Gaji</Typography>
+                                        <Typography variant='caption' className='text-slate-400'>Proses Pembayaran & Potongan</Typography>
+                                    </Box>
+                                </CardContent>
+                            </Card>
+                         </Link>
                     </Grid>
                     <Grid item xs={12}>
                         <Card className='shadow-lg rounded-2xl border-none bg-slate-900 border border-slate-100 p-2'>
@@ -216,9 +223,11 @@ const MainAdminDashboard = () => {
                                 </Box>
                             </Box>
                         </Box>
-                        <Button fullWidth variant='outlined' className='mbs-6 border-blue-200 text-blue-600 rounded-xl font-bold' onClick={() => router.push('/absensi')}>
-                            Lihat Analitik
-                        </Button>
+                        <Link href='/analitik-absensi' className='block no-underline'>
+                            <Button fullWidth variant='outlined' className='mbs-6 border-blue-200 text-blue-600 rounded-xl font-bold'>
+                                Lihat Analitik
+                            </Button>
+                        </Link>
                     </CardContent>
                 </Card>
             </Grid>

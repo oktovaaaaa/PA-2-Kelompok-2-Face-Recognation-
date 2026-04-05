@@ -205,7 +205,11 @@ func CheckOut(c *gin.Context) {
 
 	att.CheckOutTime = &now
 	if isEarlyLeave {
-		att.Status = "EARLY_LEAVE"
+		if att.Status == "LATE" {
+			att.Status = "LATE_EARLY_LEAVE"
+		} else {
+			att.Status = "EARLY_LEAVE"
+		}
 		att.SalaryDeduction += settings.EarlyLeavePenalty
 	}
 	database.DB.Save(&att)
@@ -262,7 +266,11 @@ func GetTodayAttendance(c *gin.Context) {
 		}
 	} else if att.CheckOutTime == nil { // Sudah check-in tapi belum check-out
 		if now.After(parseT(today, settings.CheckOutEnd, loc)) {
-			displayStatus = "EARLY_LEAVE" // Label: Pulang di jam kerja
+			if att.Status == "LATE" {
+				displayStatus = "LATE_EARLY_LEAVE"
+			} else {
+				displayStatus = "EARLY_LEAVE"
+			}
 		}
 	}
 
@@ -391,9 +399,50 @@ func GetMyAttendanceHistory(c *gin.Context) {
 		return records[i].Date > records[j].Date
 	})
 
-	// Hitung statistik
-	var present, absent, leave, sick, late int
-	for _, r := range records {
+	// Hitung statistik & Sinkronisasi detail record (Telat & Pulang Awal)
+	var present, absent, leave, sick, late, earlyLeave int
+	for i := range records {
+		r := &records[i]
+
+		// 1. Sinkronisasi Status & Denda Dinamis untuk Record (Jika lupa Check-Out atau Pulang Awal)
+		if r.CheckInTime != nil {
+			// Hitung Denda Keterlambatan (Jika belum tercatat di DB atau untuk memastikan akurasi)
+			checkInEnd := parseT(r.Date, settings.CheckInEnd, now.Location())
+			lateDeduction := 0.0
+			if r.CheckInTime.After(checkInEnd) {
+				lateDeduction = calculateLatePenalty(*r.CheckInTime, checkInEnd, settings.LatePenalty, settings.LatePenaltyTiers)
+			}
+
+			// Deteksi Pulang Awal (Lupa Check-out atau Check-out terlalu cepat)
+			isEarly := false
+			if r.CheckOutTime == nil {
+				// Lupa check-out: Cek apakah sudah lewat jam operasional
+				if r.Date < now.Format("2006-01-02") || (r.Date == now.Format("2006-01-02") && now.After(parseT(r.Date, settings.CheckOutEnd, now.Location()))) {
+					isEarly = true
+				}
+			} else {
+				// Sudah check-out: Cek apakah sebelum waktu yang ditentukan
+				if r.CheckOutTime.Before(parseT(r.Date, settings.CheckOutStart, now.Location())) {
+					isEarly = true
+				}
+			}
+
+			// Update Status & Gabungkan Denda (Telat + Pulang Awal)
+			if isEarly {
+				if r.Status == "LATE" || lateDeduction > 0 {
+					r.Status = "LATE_EARLY_LEAVE"
+					r.SalaryDeduction = lateDeduction + settings.EarlyLeavePenalty
+				} else {
+					r.Status = "EARLY_LEAVE"
+					r.SalaryDeduction = settings.EarlyLeavePenalty
+				}
+			} else if lateDeduction > 0 {
+				r.Status = "LATE"
+				r.SalaryDeduction = lateDeduction
+			}
+		}
+
+		// 2. Hitung Statistik berdasarkan status akhir
 		switch r.Status {
 		case "PRESENT":
 			present++
@@ -405,6 +454,11 @@ func GetMyAttendanceHistory(c *gin.Context) {
 			sick++
 		case "LATE":
 			late++
+		case "EARLY_LEAVE":
+			earlyLeave++
+		case "LATE_EARLY_LEAVE":
+			late++
+			earlyLeave++
 		}
 	}
 
@@ -416,6 +470,7 @@ func GetMyAttendanceHistory(c *gin.Context) {
 			"leave":   leave,
 			"sick":    sick,
 			"late":    late,
+			"early_leave": earlyLeave,
 			"total":   len(records),
 		},
 	})
@@ -540,10 +595,39 @@ func AdminGetAttendanceHistory(c *gin.Context) {
 				displayStatus := att.Status
 				isPastTime := dateStr < today || (dateStr == today && now.After(checkOutEndT))
 
-				if att.CheckInTime != nil && att.CheckOutTime == nil {
-					if isPastTime {
-						displayStatus = "EARLY_LEAVE"
+				if att.CheckInTime != nil {
+					// Hitung denda telat secara dinamis
+					checkInEnd := parseT(att.Date, settings.CheckInEnd, loc)
+					lateDeduction := 0.0
+					if att.CheckInTime.After(checkInEnd) {
+						lateDeduction = calculateLatePenalty(*att.CheckInTime, checkInEnd, settings.LatePenalty, settings.LatePenaltyTiers)
+					}
+
+					// Deteksi Pulang Awal (Lupa Check-out atau Check-out dini)
+					isEarly := false
+					if att.CheckOutTime == nil {
+						if isPastTime {
+							isEarly = true
+						}
 					} else {
+						if att.CheckOutTime.Before(parseT(att.Date, settings.CheckOutStart, loc)) {
+							isEarly = true
+						}
+					}
+
+					// Sinkronisasi status & denda gabungan
+					if isEarly {
+						if att.Status == "LATE" || lateDeduction > 0 {
+							displayStatus = "LATE_EARLY_LEAVE"
+							att.SalaryDeduction = lateDeduction + settings.EarlyLeavePenalty
+						} else {
+							displayStatus = "EARLY_LEAVE"
+							att.SalaryDeduction = settings.EarlyLeavePenalty
+						}
+					} else if lateDeduction > 0 {
+						displayStatus = "LATE"
+						att.SalaryDeduction = lateDeduction
+					} else if att.CheckOutTime == nil {
 						displayStatus = "WORKING"
 					}
 				}
@@ -747,14 +831,15 @@ func AdminGetDashboardSummary(c *gin.Context) {
 	}
 	checkOutEndT := parseT(today, settings.CheckOutEnd, loc)
 
-	var present, late, leave, sick, working int64
+	var present, late, leave, sick, working, lateEarlyLeave int64
 
 	// 1. Hitung yang sudah SELESAI (sudah check-out)
 	database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date = ? AND status = ? AND check_out_time IS NOT NULL", admin.CompanyID, today, "PRESENT").Count(&present)
 	database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date = ? AND status = ? AND check_out_time IS NOT NULL", admin.CompanyID, today, "LATE").Count(&late)
+	database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date = ? AND status = ? AND check_out_time IS NOT NULL", admin.CompanyID, today, "LATE_EARLY_LEAVE").Count(&lateEarlyLeave)
 
 	// 2. Hitung yang SEDANG BEKERJA (sudah check-in tapi belum check-out)
-	database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date = ? AND (status = ? OR status = ?) AND check_out_time IS NULL", admin.CompanyID, today, "PRESENT", "LATE").Count(&working)
+	database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date = ? AND (status = ? OR status = ? OR status = ?) AND check_out_time IS NULL", admin.CompanyID, today, "PRESENT", "LATE", "LATE_EARLY_LEAVE").Count(&working)
 
 	// 3. Izin & Sakit
 	database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date = ? AND status = ?", admin.CompanyID, today, "LEAVE").Count(&leave)
@@ -765,12 +850,14 @@ func AdminGetDashboardSummary(c *gin.Context) {
 	database.DB.Model(&models.User{}).Where("company_id = ? AND status = ? AND role = ?", admin.CompanyID, "ACTIVE", "EMPLOYEE").Count(&totalEmployees)
 
 	// 5. Logika Alpha vs Belum Absen vs Pulang di Jam Kerja
-	var absentCount, notYetCount, earlyLeaveCount, displayWorking int64
-	totalCheckedIn := present + late + working + leave + sick
+	var absentCount, notYetCount, earlyLeaveCount, lateEarlyLeaveCount, displayWorking int64
+	totalCheckedIn := present + late + working + leave + sick + lateEarlyLeave
 	notCheckedInYet := totalEmployees - totalCheckedIn
 	if notCheckedInYet < 0 {
 		notCheckedInYet = 0
 	}
+
+	lateEarlyLeaveCount = lateEarlyLeave
 
 	if now.After(checkOutEndT) {
 		// Jika sudah lewat jam pulang:
@@ -780,7 +867,14 @@ func AdminGetDashboardSummary(c *gin.Context) {
 		} else {
 			absentCount = notCheckedInYet
 		}
-		earlyLeaveCount = working
+		// Dinamis: Yang LATE tapi belum check-out = LATE_EARLY_LEAVE
+		// Kita perlu memisahkan 'working' yang asalnya 'PRESENT' vs 'LATE'
+		var workingLate int64
+		database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date = ? AND status = ? AND check_out_time IS NULL", admin.CompanyID, today, "LATE").Count(&workingLate)
+		
+		earlyLeaveCount = working - workingLate
+		lateEarlyLeaveCount += workingLate
+		
 		displayWorking = 0
 		notYetCount = 0
 	} else {
@@ -804,6 +898,8 @@ func AdminGetDashboardSummary(c *gin.Context) {
 		"working":            displayWorking,
 		"not_yet":            notYetCount,
 		"early_leave":        earlyLeaveCount,
+		"late_early_leave":   lateEarlyLeaveCount,
+		"late_early_leave_label": "Terlambat & Pulang di Jam Kerja",
 		"total":              totalEmployees,
 		"is_after_work_hour": now.After(checkOutEndT),
 		"is_holiday":         isHold,
@@ -959,14 +1055,15 @@ func AdminGetDetailedDashboardSummary(c *gin.Context) {
 	}
 
 	summary := map[string]int{
-		"present":     0,
-		"late":        0,
-		"working":     0,
-		"leave_sick":  0,
-		"not_yet":     0,
-		"absent":      0,
-		"early_leave": 0,
-		"total":       totalEmp,
+		"present":           0,
+		"late":              0,
+		"working":           0,
+		"leave_sick":        0,
+		"not_yet":           0,
+		"absent":            0,
+		"early_leave":       0,
+		"late_early_leave":  0,
+		"total":             totalEmp,
 	}
 
 	// 5. Iterasi Hari & Karyawan (Logika yang sama dengan History agar Konsisten)
@@ -997,6 +1094,21 @@ func AdminGetDetailedDashboardSummary(c *gin.Context) {
 					summary["absent"]++
 				} else if s == "EARLY_LEAVE" {
 					summary["early_leave"]++
+				} else if s == "LATE_EARLY_LEAVE" {
+					summary["late_early_leave"]++
+				}
+
+				// DETEKSI DINAMIS UNTUK HARI INI
+				if dateStr == today && att.CheckOutTime == nil && now.After(checkOutEndT) {
+					if strings.ToUpper(att.Status) == "LATE" {
+						// Pindahkan dari 'late' ke 'late_early_leave'
+						summary["late_early_leave"]++
+						summary["late"]--
+					} else if strings.ToUpper(att.Status) == "PRESENT" {
+						// Pindahkan dari 'present' ke 'early_leave'
+						summary["early_leave"]++
+						summary["present"]--
+					}
 				}
 			} else {
 				// Cegah hitung sebelum karyawan terdaftar
@@ -1046,7 +1158,7 @@ func AdminGetAttendanceTrend(c *gin.Context) {
 	year := c.Query("year")
 
 	var labels []string
-	var presentData, lateData, absentData, leaveSickData, earlyLeaveData []float64
+	var presentData, lateData, absentData, leaveSickData, earlyLeaveData, lateEarlyLeaveData []float64
 
 	now := time.Now()
 	loc := now.Location()
@@ -1063,7 +1175,7 @@ func AdminGetAttendanceTrend(c *gin.Context) {
 	if totalEmp == 0 {
 		utils.Success(c, "Trend data (empty)", gin.H{
 			"labels": []string{},
-			"present": []float64{}, "late": []float64{}, "absent": []float64{}, "leave_sick": []float64{}, "early_leave": []float64{},
+			"present": []float64{}, "late": []float64{}, "absent": []float64{}, "leave_sick": []float64{}, "early_leave": []float64{}, "late_early_leave": []float64{},
 		})
 		return
 	}
@@ -1073,11 +1185,13 @@ func AdminGetAttendanceTrend(c *gin.Context) {
 			labels = append(labels, time.Month(m).String()[:3])
 			pattern := fmt.Sprintf("%s-%02d%%", year, m)
 
-			var p, l, ls, el int64
+			var p, l, ls, el, lel int64
 			database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date LIKE ? AND status = 'PRESENT'", adminUser.CompanyID, pattern).Count(&p)
 			database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date LIKE ? AND status = 'LATE'", adminUser.CompanyID, pattern).Count(&l)
 			database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date LIKE ? AND (status = 'LEAVE' OR status = 'SICK')", adminUser.CompanyID, pattern).Count(&ls)
 			database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date LIKE ? AND status = 'EARLY_LEAVE'", adminUser.CompanyID, pattern).Count(&el)
+			database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date LIKE ? AND status = 'LATE_EARLY_LEAVE'", adminUser.CompanyID, pattern).Count(&lel)
+			database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date LIKE ? AND status = 'LATE_EARLY_LEAVE'", adminUser.CompanyID, pattern).Count(&lel)
 
 			// Untuk tahunan, Alpha dihitung per bulan: (TotalEmp * hari_kerja_per_bulan) - total_absen? 
             // Agak kompleks tanpa calendar. Sederhananya, kita akumulasi Alpha harian untuk bulan tersebut.
@@ -1121,6 +1235,7 @@ func AdminGetAttendanceTrend(c *gin.Context) {
 			absentData = append(absentData, float64(a))
 			leaveSickData = append(leaveSickData, float64(ls))
 			earlyLeaveData = append(earlyLeaveData, float64(el))
+			lateEarlyLeaveData = append(lateEarlyLeaveData, float64(lel))
 		}
 	} else if filter == "month" && month != "" && year != "" {
 		yInt, _ := strconv.Atoi(year)
@@ -1133,11 +1248,29 @@ func AdminGetAttendanceTrend(c *gin.Context) {
 			dateStr := d.Format("2006-01-02")
 			labels = append(labels, d.Format("02"))
 
-			var p, l, ls, el int64
+			var p, l, ls, el, lel int64
 			database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date = ? AND status = 'PRESENT'", adminUser.CompanyID, dateStr).Count(&p)
 			database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date = ? AND status = 'LATE'", adminUser.CompanyID, dateStr).Count(&l)
 			database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date = ? AND (status = 'LEAVE' OR status = 'SICK')", adminUser.CompanyID, dateStr).Count(&ls)
 			database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date = ? AND status = 'EARLY_LEAVE'", adminUser.CompanyID, dateStr).Count(&el)
+			database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date = ? AND status = 'LATE_EARLY_LEAVE'", adminUser.CompanyID, dateStr).Count(&lel)
+
+			// DETEKSI DINAMIS UNTUK HARI INI DI GRAFIK BULANAN
+			if dateStr == today && now.After(checkOutEndT) {
+				var recordsToday []models.Attendance
+				database.DB.Where("company_id = ? AND date = ?", adminUser.CompanyID, today).Find(&recordsToday)
+				for _, r := range recordsToday {
+					if r.CheckOutTime == nil {
+						if strings.ToUpper(r.Status) == "LATE" {
+							lel++
+							l--
+						} else if strings.ToUpper(r.Status) == "PRESENT" {
+							el++
+							p--
+						}
+					}
+				}
+			}
 
 			// Hitung Alpha (Gunakan logika yang sama: Hari lewat + tidak terdaftar record)
 			var a int64
@@ -1169,6 +1302,7 @@ func AdminGetAttendanceTrend(c *gin.Context) {
 			absentData = append(absentData, float64(a))
 			leaveSickData = append(leaveSickData, float64(ls))
 			earlyLeaveData = append(earlyLeaveData, float64(el))
+			lateEarlyLeaveData = append(lateEarlyLeaveData, float64(lel))
 		}
 	} else if filter == "today" {
 		for h := 6; h <= 18; h++ {
@@ -1176,11 +1310,12 @@ func AdminGetAttendanceTrend(c *gin.Context) {
 			labels = append(labels, label)
 			hourPattern := fmt.Sprintf("%% %02d:%%", h)
 
-			var p, l, ls, el int64
+			var p, l, ls, el, lel int64
 			database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date = ? AND check_in_time::text LIKE ? AND status = 'PRESENT'", adminUser.CompanyID, today, hourPattern).Count(&p)
 			database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date = ? AND check_in_time::text LIKE ? AND status = 'LATE'", adminUser.CompanyID, today, hourPattern).Count(&l)
 			database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date = ? AND check_in_time::text LIKE ? AND (status = 'LEAVE' OR status = 'SICK')", adminUser.CompanyID, today, hourPattern).Count(&ls)
 			database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date = ? AND check_in_time::text LIKE ? AND status = 'EARLY_LEAVE'", adminUser.CompanyID, today, hourPattern).Count(&el)
+			database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date = ? AND check_in_time::text LIKE ? AND status = 'LATE_EARLY_LEAVE'", adminUser.CompanyID, today, hourPattern).Count(&lel)
 
 			presentData = append(presentData, float64(p))
 			lateData = append(lateData, float64(l))
@@ -1194,11 +1329,29 @@ func AdminGetAttendanceTrend(c *gin.Context) {
 			dateStr := d.Format("2006-01-02")
 			labels = append(labels, d.Format("Mon"))
 
-			var p, l, ls, el int64
+			var p, l, ls, el, lel int64
 			database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date = ? AND status = 'PRESENT'", adminUser.CompanyID, dateStr).Count(&p)
 			database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date = ? AND status = 'LATE'", adminUser.CompanyID, dateStr).Count(&l)
 			database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date = ? AND (status = 'LEAVE' OR status = 'SICK')", adminUser.CompanyID, dateStr).Count(&ls)
 			database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date = ? AND status = 'EARLY_LEAVE'", adminUser.CompanyID, dateStr).Count(&el)
+			database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date = ? AND status = 'LATE_EARLY_LEAVE'", adminUser.CompanyID, dateStr).Count(&lel)
+
+			// DETEKSI DINAMIS UNTUK HARI INI DI GRAFIK MINGGUAN/DEFAULT
+			if dateStr == today && now.After(checkOutEndT) {
+				var recordsToday []models.Attendance
+				database.DB.Where("company_id = ? AND date = ?", adminUser.CompanyID, today).Find(&recordsToday)
+				for _, r := range recordsToday {
+					if r.CheckOutTime == nil {
+						if strings.ToUpper(r.Status) == "LATE" {
+							lel++
+							l--
+						} else if strings.ToUpper(r.Status) == "PRESENT" {
+							el++
+							p--
+						}
+					}
+				}
+			}
 
 			var a int64
 			var weeklyRecords []string
@@ -1229,6 +1382,7 @@ func AdminGetAttendanceTrend(c *gin.Context) {
 			absentData = append(absentData, float64(a))
 			leaveSickData = append(leaveSickData, float64(ls))
 			earlyLeaveData = append(earlyLeaveData, float64(el))
+			lateEarlyLeaveData = append(lateEarlyLeaveData, float64(lel))
 		}
 	}
 
@@ -1239,5 +1393,6 @@ func AdminGetAttendanceTrend(c *gin.Context) {
 		"absent":      absentData,
 		"leave_sick":  leaveSickData,
 		"early_leave": earlyLeaveData,
+		"late_early_leave": lateEarlyLeaveData,
 	})
 }

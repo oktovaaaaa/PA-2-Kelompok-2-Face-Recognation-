@@ -12,6 +12,7 @@ import '../../../../common/widgets/app_text_field.dart';
 import '../../../../common/widgets/app_dialog.dart';
 import '../../../../auth/data/auth_repository.dart';
 import 'package:pinput/pinput.dart';
+import '../../../../../core/utils/currency_formatter.dart';
 
 class EmployeeProfileTab extends StatefulWidget {
   const EmployeeProfileTab({super.key});

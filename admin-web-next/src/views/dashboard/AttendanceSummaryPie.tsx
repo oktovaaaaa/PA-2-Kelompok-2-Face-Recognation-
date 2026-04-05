@@ -26,8 +26,8 @@ const AttendanceSummaryPie = ({ summary, onRefresh }: Props) => {
     setIsMounted(true)
   }, [])
   const pieOptions: ApexOptions = {
-    labels: ['Hadir Tepat Waktu', 'Terlambat', 'Alpha', 'Izin/Sakit', 'Sedang Bekerja', 'Pulang Awal', 'Belum Hadir'],
-    colors: ['#4CAF50', '#FF9800', '#F44336', '#03A9F4', '#3F51B5', '#9C27B0', '#9E9E9E'],
+    labels: ['Hadir Tepat Waktu', 'Terlambat', 'Alpha', 'Izin/Sakit', 'Sedang Bekerja', 'Pulang di jam kerja', 'Terlambat & Pulang di Jam Kerja', 'Belum Hadir'],
+    colors: ['#22C55E', '#FBBF24', '#EF4444', '#0EA5E9', '#6366F1', '#F97316', '#D946EF', '#94A3B8'],
     legend: { show: false },
     dataLabels: { enabled: false },
     stroke: { width: 0 },
@@ -55,6 +55,7 @@ const AttendanceSummaryPie = ({ summary, onRefresh }: Props) => {
     (summary.leave || 0) + (summary.sick || 0),
     summary.working,
     summary.early_leave,
+    summary.late_early_leave,
     summary.not_yet
   ] : []
 
@@ -70,28 +71,30 @@ const AttendanceSummaryPie = ({ summary, onRefresh }: Props) => {
                     <i className='ri-refresh-line text-slate-400' />
                 </IconButton>
             </Box>
-            <Box className='flex flex-col items-center justify-center min-h-[300px]'>
-                {isMounted ? (
+            <Box className='flex flex-col items-center justify-center min-h-[300px] w-full'>
+                {isMounted && summary ? (
                     <AppReactApexCharts type='donut' width='100%' height={300} options={pieOptions} series={pieSeries} />
                 ) : (
-                    <Box className='h-[300px] flex items-center justify-center'>
-                        <i className='ri-loader-4-line animate-spin text-2xl text-slate-200' />
+                    <Box className='h-[300px] flex flex-col items-center justify-center gap-4'>
+                        <i className='ri-loader-4-line animate-spin text-3xl text-blue-500' />
+                        <Typography className='text-slate-400 text-xs italic'>Memuat data ringkasan...</Typography>
                     </Box>
                 )}
                 <Grid container spacing={2} className='mbs-6'>
                     {[
-                        { color: 'bg-[#4CAF50]', label: 'Hadir', val: summary?.present },
-                        { color: 'bg-[#FF9800]', label: 'Telat', val: summary?.late },
-                        { color: 'bg-[#F44336]', label: 'Alpha', val: summary?.absent },
-                        { color: 'bg-[#03A9F4]', label: 'Izin', val: (summary?.leave || 0) + (summary?.sick || 0) },
-                        { color: 'bg-[#3F51B5]', label: 'Bekerja', val: summary?.working },
-                        { color: 'bg-[#9C27B0]', label: 'Pulang Awal', val: summary?.early_leave },
-                        { color: 'bg-[#9E9E9E]', label: 'Belum Hadir', val: summary?.not_yet }
+                        { color: 'bg-[#22C55E]', label: 'Hadir', val: summary?.present },
+                        { color: 'bg-[#FBBF24]', label: 'Telat', val: summary?.late },
+                        { color: 'bg-[#EF4444]', label: 'Alpha', val: summary?.absent },
+                        { color: 'bg-[#0EA5E9]', label: 'Izin', val: (summary?.leave || 0) + (summary?.sick || 0) },
+                        { color: 'bg-[#6366F1]', label: 'Bekerja', val: summary?.working },
+                        { color: 'bg-[#F97316]', label: 'Pulang JK', val: summary?.early_leave },
+                        { color: 'bg-[#D946EF]', label: 'Terlambat & Pulang di Jam Kerja', val: summary?.late_early_leave },
+                        { color: 'bg-[#94A3B8]', label: 'Belum Hadir', val: summary?.not_yet }
                     ].map((item, idx) => (
-                        <Grid item xs={6} md={4} key={idx}>
-                            <Box className='flex items-center gap-2 p-2 rounded-xl bg-slate-50'>
-                                <Box className={`w-2 h-2 rounded-full`} style={{ backgroundColor: item.color.replace('bg-', '') }} />
-                                <Typography className='text-[10px] whitespace-nowrap'>{item.label}: <b>{item.val || 0}</b></Typography>
+                        <Grid item xs={6} key={idx}>
+                            <Box className='flex items-center gap-2 p-2 rounded-xl bg-slate-50 border border-slate-100'>
+                                <Box className={`w-2.5 h-2.5 rounded-full`} style={{ backgroundColor: item.color.replace('bg-[', '').replace(']', '') }} />
+                                <Typography className='text-[10px] text-slate-600 whitespace-nowrap'>{item.label}: <b className='text-slate-800 ml-1'>{item.val || 0}</b></Typography>
                             </Box>
                         </Grid>
                     ))}

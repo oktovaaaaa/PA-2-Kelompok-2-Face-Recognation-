@@ -67,6 +67,7 @@ class ExcelExportService {
         'WORKING': {'label': 'Sedang Bekerja', 'color': '#818CF8'},
         'NOT_YET': {'label': 'Belum Hadir', 'color': '#94A3B8'},
         'EARLY_LEAVE': {'label': 'Pulang di Jam Kerja', 'color': '#8B5CF6'},
+        'LATE_EARLY_LEAVE': {'label': 'Terlambat & Pulang di Jam Kerja', 'color': '#D946EF'},
       };
 
       summaryKeys.forEach((key, data) {
@@ -179,6 +180,7 @@ class ExcelExportService {
       case 'WORKING': return 'Sedang Bekerja';
       case 'NOT_YET': return 'Belum Hadir';
       case 'EARLY_LEAVE': return 'Pulang di Jam Kerja';
+      case 'LATE_EARLY_LEAVE': return 'Terlambat & Pulang di Jam Kerja';
       case 'LEAVE': return 'Izin';
       case 'SICK': return 'Sakit';
       default: return status;

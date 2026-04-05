@@ -89,7 +89,19 @@ const RecentAttendanceTable = () => {
             case 'LEAVE_SICK':
                 return <Chip label='Izin/Sakit' size='small' color='primary' variant='tonal' className='font-bold uppercase text-[10px]' />
             case 'EARLY_LEAVE':
-                return <Chip label='Pulang di Jam Kerja' size='small' color='secondary' variant='tonal' className='font-bold uppercase text-[10px]' />
+                return <Chip label='Pulang di jam kerja' size='small' color='warning' variant='tonal' className='font-bold uppercase text-[10px]' />
+            case 'LATE_EARLY_LEAVE':
+                return <Chip 
+                    label='Terlambat & Pulang di jam kerja' 
+                    size='small' 
+                    variant='tonal' 
+                    className='font-bold uppercase text-[10px]' 
+                    sx={{
+                        backgroundColor: 'rgba(217, 70, 239, 0.16) !important', 
+                        color: '#D946EF !important',
+                        border: '1px solid rgba(217, 70, 239, 0.5)'
+                    }}
+                />
             case 'NOT_YET':
                 return <Chip label='Belum Hadir' size='small' variant='tonal' className='font-bold uppercase text-[10px] bg-slate-100 text-slate-500' />
             default:
@@ -116,6 +128,7 @@ const RecentAttendanceTable = () => {
                             <TableCell className='font-bold text-slate-500 uppercase text-[11px] py-4'>Karyawan</TableCell>
                             <TableCell className='font-bold text-slate-500 uppercase text-[11px] py-4'>Email</TableCell>
                             <TableCell className='font-bold text-slate-500 uppercase text-[11px] py-4'>Waktu Check-In</TableCell>
+                            <TableCell className='font-bold text-slate-500 uppercase text-[11px] py-4'>Waktu Check-Out</TableCell>
                             <TableCell className='font-bold text-slate-500 uppercase text-[11px] py-4' align='center'>Status</TableCell>
                         </TableRow>
                     </TableHead>
@@ -141,6 +154,12 @@ const RecentAttendanceTable = () => {
                                         <Typography className='font-bold text-slate-800'>{formatTime(log.check_in_time)}</Typography>
                                     </Box>
                                 </TableCell>
+                                <TableCell>
+                                    <Box className='flex items-center gap-2'>
+                                        <i className='ri-time-line text-orange-500 text-lg' />
+                                        <Typography className='font-bold text-slate-800'>{formatTime(log.check_out_time)}</Typography>
+                                    </Box>
+                                </TableCell>
                                 <TableCell align='center'>
                                     {getStatusChip(log.status)}
                                 </TableCell>
@@ -148,7 +167,7 @@ const RecentAttendanceTable = () => {
                         ))}
                         {logs.length === 0 && !loading && (
                             <TableRow>
-                                <TableCell colSpan={4} align='center' className='py-12'>
+                                <TableCell colSpan={5} align='center' className='py-12'>
                                     <Box className='flex flex-col items-center gap-2 opacity-30'>
                                         <i className='ri-inbox-line text-5xl' />
                                         <Typography>Belum ada data absen hari ini</Typography>

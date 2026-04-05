@@ -49,6 +49,7 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
     'working': 0,
     'not_yet': 0,
     'early_leave': 0,
+    'late_early_leave': 0,
     'total': 0
   };
   bool _loadingSummary = false;
@@ -374,12 +375,13 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
                                     if ((_summary['absent'] ?? 0) > 0) PieChartSectionData(value: (_summary['absent'] as num).toDouble(), color: Colors.red, radius: 20, showTitle: false),
                                     if (((_summary['leave'] ?? 0) + (_summary['sick'] ?? 0)) > 0) PieChartSectionData(value: ((_summary['leave'] ?? 0) + (_summary['sick'] ?? 0) as num).toDouble(), color: Colors.blue, radius: 20, showTitle: false),
                                     if ((_summary['not_yet'] ?? 0) > 0) PieChartSectionData(value: (_summary['not_yet'] as num).toDouble(), color: Colors.grey.shade300, radius: 20, showTitle: false),
-                                    if ((_summary['working'] ?? 0) > 0) PieChartSectionData(value: (_summary['working'] as num).toDouble(), color: Colors.indigo.shade300, radius: 20, showTitle: false),
-                                    if ((_summary['early_leave'] ?? 0) > 0) PieChartSectionData(value: (_summary['early_leave'] as num).toDouble(), color: Colors.deepPurple.shade300, radius: 20, showTitle: false),
+                                    if ((_summary['working'] ?? 0) > 0) PieChartSectionData(value: (_summary['working'] as num).toDouble(), color: const Color(0xFF818CF8), radius: 20, showTitle: false),
+                                    if ((_summary['early_leave'] ?? 0) > 0) PieChartSectionData(value: (_summary['early_leave'] as num).toDouble(), color: const Color(0xFFF97316), radius: 20, showTitle: false),
+                                    if ((_summary['late_early_leave'] ?? 0) > 0) PieChartSectionData(value: (_summary['late_early_leave'] as num).toDouble(), color: const Color(0xFFD946EF), radius: 20, showTitle: false),
                                     
                                     // Fallback jika semua nol
                                     if ((_summary['total'] ?? 0) == 0)
-                                      PieChartSectionData(value: 1, color: Colors.grey.shade200, radius: 20, showTitle: false),
+                                      PieChartSectionData(value: 1, color: const Color(0xFFE2E8F0), radius: 20, showTitle: false),
                                   ],
                                 ),
                               ),
@@ -388,19 +390,21 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
                             Expanded(
                               child: Column(
                                 children: [
-                                  _summaryItem(Colors.green, 'Hadir Tepat Waktu', _summary['present'] ?? 0),
+                                  _summaryItem(const Color(0xFF22C55E), 'Hadir Tepat Waktu', _summary['present'] ?? 0),
                                   const SizedBox(height: 8),
-                                  _summaryItem(Colors.orange, 'Terlambat', _summary['late'] ?? 0),
+                                  _summaryItem(const Color(0xFFFBBF24), 'Terlambat', _summary['late'] ?? 0),
                                   const SizedBox(height: 8),
-                                  _summaryItem(Colors.indigo.shade300, 'Sedang Bekerja', _summary['working'] ?? 0),
+                                  _summaryItem(const Color(0xFF818CF8), 'Sedang Bekerja', _summary['working'] ?? 0),
                                   const SizedBox(height: 8),
-                                  _summaryItem(Colors.blue, 'Izin/Sakit', (_summary['leave'] ?? 0) + (_summary['sick'] ?? 0)),
+                                  _summaryItem(const Color(0xFF3B82F6), 'Izin/Sakit', (_summary['leave'] ?? 0) + (_summary['sick'] ?? 0)),
                                   const SizedBox(height: 8),
-                                  _summaryItem(Colors.grey.shade400, 'Belum Hadir', _summary['not_yet'] ?? 0),
+                                  _summaryItem(const Color(0xFF94A3B8), 'Belum Hadir', _summary['not_yet'] ?? 0),
                                   const SizedBox(height: 8),
-                                  _summaryItem(Colors.red.shade400, 'Alpha', _summary['absent'] ?? 0),
+                                  _summaryItem(const Color(0xFFEF4444), 'Alpha', _summary['absent'] ?? 0),
                                   const SizedBox(height: 8),
-                                  _summaryItem(Colors.deepPurple.shade300, 'Pulang di Jam Kerja', _summary['early_leave'] ?? 0),
+                                  _summaryItem(const Color(0xFFF97316), 'Pulang di Jam Kerja', _summary['early_leave'] ?? 0),
+                                  const SizedBox(height: 8),
+                                  _summaryItem(const Color(0xFFD946EF), 'Terlambat & Pulang di Jam Kerja', _summary['late_early_leave'] ?? 0),
                                 ],
                               ),
                             ),

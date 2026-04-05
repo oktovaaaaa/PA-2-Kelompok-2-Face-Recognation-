@@ -92,6 +92,8 @@ class _EmployeeHistoryTabState extends State<EmployeeHistoryTab> {
       case 'ABSENT': return const Color(0xFFDC2626);
       case 'LEAVE': return const Color(0xFFD97706);
       case 'SICK': return const Color(0xFF2563EB);
+      case 'EARLY_LEAVE': return const Color(0xFFF97316); // Orange
+      case 'LATE_EARLY_LEAVE': return const Color(0xFFD946EF); // Magenta
       default: return Colors.grey;
     }
   }
@@ -103,6 +105,8 @@ class _EmployeeHistoryTabState extends State<EmployeeHistoryTab> {
       case 'ABSENT': return 'Alpha';
       case 'LEAVE': return 'Izin';
       case 'SICK': return 'Sakit';
+      case 'EARLY_LEAVE': return 'Pulang di jam kerja';
+      case 'LATE_EARLY_LEAVE': return 'Terlambat & Pulang di jam kerja';
       default: return status;
     }
   }
@@ -170,7 +174,9 @@ class _EmployeeHistoryTabState extends State<EmployeeHistoryTab> {
     final absent = _stats?['absent'] ?? 0;
     final leave = _stats?['leave'] ?? 0;
     final sick = _stats?['sick'] ?? 0;
+    final earlyLeave = _stats?['early_leave'] ?? 0;
     final total = _stats?['total'] ?? 0;
+    final lateEarlyLeave = _stats?['late_early_leave'] ?? 0;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light.copyWith(
@@ -376,6 +382,8 @@ class _EmployeeHistoryTabState extends State<EmployeeHistoryTab> {
                                         if (absent > 0) PieChartSectionData(value: absent.toDouble(), color: const Color(0xFFDC2626), title: '$absent', radius: 45, titleStyle: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                                         if (leave > 0) PieChartSectionData(value: leave.toDouble(), color: const Color(0xFFD97706), title: '$leave', radius: 45, titleStyle: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                                         if (sick > 0) PieChartSectionData(value: sick.toDouble(), color: const Color(0xFF2563EB), title: '$sick', radius: 45, titleStyle: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                        if (earlyLeave > 0) PieChartSectionData(value: earlyLeave.toDouble(), color: const Color(0xFFF97316), title: '$earlyLeave', radius: 45, titleStyle: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                        if (lateEarlyLeave > 0) PieChartSectionData(value: lateEarlyLeave.toDouble(), color: const Color(0xFFD946EF), title: '$lateEarlyLeave', radius: 45, titleStyle: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                                       ],
                                     ),
                                   ),
@@ -386,11 +394,12 @@ class _EmployeeHistoryTabState extends State<EmployeeHistoryTab> {
                                   runSpacing: 12,
                                   alignment: WrapAlignment.center,
                                   children: [
-                                    _legendItem(const Color(0xFF2E7D32), 'Hadir', present),
-                                    _legendItem(const Color(0xFFEA580C), 'Terlambat', lateCount),
-                                    _legendItem(const Color(0xFFDC2626), 'Alpha', absent),
-                                    _legendItem(const Color(0xFFD97706), 'Izin', leave),
-                                    _legendItem(const Color(0xFF2563EB), 'Sakit', sick),
+                                    _legendItem(const Color(0xFF22C55E), 'Hadir', present),
+                                    _legendItem(const Color(0xFFFBBF24), 'Terlambat', lateCount),
+                                    _legendItem(const Color(0xFFEF4444), 'Alpha', absent),
+                                    _legendItem(const Color(0xFF3B82F6), 'Izin/Sakit', leave + sick),
+                                    _legendItem(const Color(0xFFF97316), 'Pulang JK', earlyLeave),
+                                    _legendItem(const Color(0xFFD946EF), 'Terlambat & Pulang di Jam Kerja', lateEarlyLeave),
                                   ],
                                 ),
                               ],

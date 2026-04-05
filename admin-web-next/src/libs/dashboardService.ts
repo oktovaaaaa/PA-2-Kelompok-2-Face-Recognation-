@@ -19,6 +19,7 @@ export interface DashboardSummary {
     working: number;
     not_yet: number;
     early_leave: number;
+    late_early_leave: number;
     total: number;
 }
 
@@ -29,6 +30,7 @@ export interface AttendanceTrend {
     absent: number[];
     leave_sick: number[];
     early_leave: number[];
+    late_early_leave: number[];
 }
 
 export interface AttendanceLog {

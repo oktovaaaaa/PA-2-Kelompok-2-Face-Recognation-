@@ -21,13 +21,14 @@ const getMonthName = (month: number) => {
 }
 
 const statusColors = {
-  present: '#4CAF50',     // Green
-  late: '#FF9800',        // Orange
-  working: '#3F51B5',     // Indigo
-  leave_sick: '#03A9F4',  // Light Blue
-  not_yet: '#9E9E9E',     // Grey
-  absent: '#F44336',      // Red
-  early_leave: '#9C27B0'  // Purple
+  present: '#22C55E',     // Green
+  late: '#FBBF24',        // Yellow/Amber
+  working: '#6366F1',     // Indigo
+  leave_sick: '#0EA5E9',  // Light Blue
+  not_yet: '#94A3B8',     // Slate/Grey
+  absent: '#EF4444',      // Red
+  early_leave: '#F97316', // Orange
+  late_early_leave: '#D946EF' // Magenta
 }
 
 interface AttendanceChartsProps {
@@ -72,6 +73,7 @@ const AttendanceCharts = ({ period, month, year }: AttendanceChartsProps) => {
     { label: 'Belum Hadir', count: stats?.not_yet || 0, color: statusColors.not_yet },
     { label: 'Alpha', count: stats?.absent || 0, color: statusColors.absent },
     { label: 'Pulang di Jam Kerja', count: stats?.early_leave || 0, color: statusColors.early_leave },
+    { label: 'Terlambat & Pulang di Jam Kerja', count: stats?.late_early_leave || 0, color: statusColors.late_early_leave },
   ]
 
   const donutOptions = {
@@ -82,7 +84,8 @@ const AttendanceCharts = ({ period, month, year }: AttendanceChartsProps) => {
       'Izin/Sakit', 
       'Belum Hadir', 
       'Alpha', 
-      'Pulang di Jam Kerja'
+      'Pulang di Jam Kerja',
+      'Terlambat & Pulang di Jam Kerja'
     ],
     colors: [
         statusColors.present,
@@ -91,7 +94,8 @@ const AttendanceCharts = ({ period, month, year }: AttendanceChartsProps) => {
         statusColors.leave_sick,
         statusColors.not_yet,
         statusColors.absent,
-        statusColors.early_leave
+        statusColors.early_leave,
+        statusColors.late_early_leave
     ],
     legend: { 
       position: 'bottom',
@@ -141,7 +145,8 @@ const AttendanceCharts = ({ period, month, year }: AttendanceChartsProps) => {
     stats?.leave_sick || 0,
     stats?.not_yet || 0,
     stats?.absent || 0,
-    stats?.early_leave || 0
+    stats?.early_leave || 0,
+    stats?.late_early_leave || 0
   ]
 
   const lineSeries = [
@@ -149,7 +154,8 @@ const AttendanceCharts = ({ period, month, year }: AttendanceChartsProps) => {
     { name: 'Terlambat', data: trendData.late || [] },
     { name: 'Alpha', data: trendData.absent || [] },
     { name: 'Izin/Sakit', data: trendData.leave_sick || [] },
-    { name: 'Pulang di Jam Kerja', data: trendData.early_leave || [] }
+    { name: 'Pulang di Jam Kerja', data: trendData.early_leave || [] },
+    { name: 'Terlambat & Pulang di Jam Kerja', data: trendData.late_early_leave || [] }
   ]
 
   const lineOptions = {
@@ -160,7 +166,8 @@ const AttendanceCharts = ({ period, month, year }: AttendanceChartsProps) => {
         statusColors.late,
         statusColors.absent,
         statusColors.leave_sick,
-        statusColors.early_leave
+        statusColors.early_leave,
+        statusColors.late_early_leave
     ],
     fill: {
         type: 'gradient',

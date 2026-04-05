@@ -18,6 +18,27 @@ import (
 	"gorm.io/gorm"
 )
 
+// Helper: Format Rupiah dengan titik (Misal: 1000000 -> 1.000.000)
+// Helper: Format Rupiah dengan titik (Misal: 1000000 -> 1.000.000)
+func formatRupiah(amount float64) string {
+	// Bulatkan ke int untuk nominal denda
+	n := int64(amount)
+	s := strconv.FormatInt(n, 10)
+	
+	if len(s) <= 3 {
+		return s
+	}
+
+	var res []byte
+	for i := 0; i < len(s); i++ {
+		if i > 0 && (len(s)-i)%3 == 0 {
+			res = append(res, '.')
+		}
+		res = append(res, s[i])
+	}
+	return string(res)
+}
+
 type LateTier struct {
 	Hours   int     `json:"hours"`
 	Penalty float64 `json:"penalty"`
@@ -387,7 +408,7 @@ func generateSalary(userID string, month int, year int) {
 
 	salary.BaseSalary = baseSalary
 	salary.Deductions = deductions
-	salary.DeductionsDetail = details
+	salary.DeductionsDetail = "DEBUG: " + details
 	salary.TotalSalary = baseSalary - deductions
 	if salary.TotalSalary < 0 {
 		salary.TotalSalary = 0
@@ -458,22 +479,51 @@ func CalculateDeductions(userID string, month int, year int) (float64, string) {
 		}
 
 		if att, exists := existingRecords[dateStr]; exists {
-			// Ada record: Tambahkan denda jika ada (Terlambat/Alpha Manual)
-			if att.SalaryDeduction > 0 {
-				totalDeduction += att.SalaryDeduction
-				reason := "Pelanggaran"
-				if att.Status == "LATE" {
-					reason = "Terlambat"
-				} else if att.Status == "ABSENT" {
-					reason = "Alpha"
+			// Ada record: Hitung ulang denda secara dinamis untuk akurasi laporan (Telat + Pulang Awal)
+			checkInEnd := parseT(dateStr, settings.CheckInEnd, now.Location())
+			lateDeduction := 0.0
+			if att.CheckInTime != nil && att.CheckInTime.After(checkInEnd) {
+				lateDeduction = calculateLatePenalty(*att.CheckInTime, checkInEnd, settings.LatePenalty, settings.LatePenaltyTiers)
+			}
+
+			earlyDeduction := 0.0
+			isEarly := false
+			if att.CheckInTime != nil {
+				if att.CheckOutTime == nil {
+					// Lupa Check-out: Cek apakah sudah lewat jam operasional
+					if dateStr < now.Format("2006-01-02") || (dateStr == now.Format("2006-01-02") && now.After(parseT(dateStr, settings.CheckOutEnd, now.Location()))) {
+						isEarly = true
+						earlyDeduction = settings.EarlyLeavePenalty
+					}
+				} else {
+					// Pulang Dini: Cek apakah sebelum waktu yang ditentukan
+					if att.CheckOutTime.Before(parseT(dateStr, settings.CheckOutStart, now.Location())) {
+						isEarly = true
+						earlyDeduction = settings.EarlyLeavePenalty
+					}
 				}
-				details += reason + " pada " + att.Date + " (Rp " + strconv.FormatFloat(att.SalaryDeduction, 'f', 0, 64) + "); "
+			}
+
+			// Tambahkan ke total dan detail
+			if lateDeduction > 0 && isEarly {
+				totalDeduction += lateDeduction + earlyDeduction
+				details += "Terlambat & Pulang di jam kerja pada " + dateStr + " (Rp " + formatRupiah(lateDeduction+earlyDeduction) + "); "
+			} else if lateDeduction > 0 {
+				totalDeduction += lateDeduction
+				details += "Terlambat pada " + dateStr + " (Rp " + formatRupiah(lateDeduction) + "); "
+			} else if isEarly {
+				totalDeduction += earlyDeduction
+				details += "Pulang di jam kerja pada " + dateStr + " (Rp " + formatRupiah(earlyDeduction) + "); "
+			} else if att.Status == "ABSENT" || (att.SalaryDeduction > 0 && att.Status != "LATE" && att.Status != "EARLY_LEAVE" && att.Status != "LATE_EARLY_LEAVE") {
+				// Cover manual penalties or custom status (jangan denda ganda jika status sudah LATE/EARLY_LEAVE)
+				totalDeduction += att.SalaryDeduction
+				details += att.Status + " pada " + dateStr + " (Rp " + formatRupiah(att.SalaryDeduction) + "); "
 			}
 		} else {
 			// Tidak ada record: Cek apakah hari kerja atau libur
 			isHold, _ := isHoliday(user.CompanyID, d)
 			if !isHold {
-				// Cek jam operasional jika itu hari ini (jangan alpha-kan hari ini sebelum waktunya habis)
+				// Cek jam operasional jika itu hari ini
 				if dateStr == now.Format("2006-01-02") {
 					loc := now.Location()
 					checkOutEnd := parseT(dateStr, settings.CheckOutEnd, loc)
@@ -485,7 +535,7 @@ func CalculateDeductions(userID string, month int, year int) (float64, string) {
 				// Hari kerja tanpa absen = ALPHA
 				if settings.AlphaPenalty > 0 {
 					totalDeduction += settings.AlphaPenalty
-					details += "Alpha pada " + dateStr + " (Rp " + strconv.FormatFloat(settings.AlphaPenalty, 'f', 0, 64) + "); "
+					details += "Alpha pada " + dateStr + " (Rp " + formatRupiah(settings.AlphaPenalty) + "); "
 				}
 			}
 		}
@@ -497,7 +547,7 @@ func CalculateDeductions(userID string, month int, year int) (float64, string) {
 
 	for _, p := range manualPenalties {
 		totalDeduction += p.Amount
-		details += p.Title + " (Rp " + strconv.FormatFloat(p.Amount, 'f', 0, 64) + "); "
+		details += p.Title + " (Rp " + formatRupiah(p.Amount) + "); "
 	}
 
 	return totalDeduction, details
