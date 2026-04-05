@@ -675,11 +675,12 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
 
   Widget _summaryItem(Color color, String label, dynamic count) {
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Container(width: 10, height: 10, decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(2))),
+        Container(margin: const EdgeInsets.only(top: 4), width: 10, height: 10, decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(2))),
         const SizedBox(width: 8),
-        Text(label, style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
-        const Spacer(),
+        Expanded(child: Text(label, style: TextStyle(color: Colors.grey.shade600, fontSize: 13), softWrap: true)),
+        const SizedBox(width: 4),
         Text(count.toString(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF0F172A))),
       ],
     );

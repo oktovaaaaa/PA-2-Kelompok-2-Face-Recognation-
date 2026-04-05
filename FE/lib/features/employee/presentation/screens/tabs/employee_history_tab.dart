@@ -457,10 +457,18 @@ class _EmployeeHistoryTabState extends State<EmployeeHistoryTab> {
                                       ),
                                   ],
                                 ),
-                                trailing: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                  decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(20)),
-                                  child: Text(_statusLabel(status), style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 11)),
+                                trailing: ConstrainedBox(
+                                  constraints: const BoxConstraints(maxWidth: 120),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                    decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(20)),
+                                    child: Text(
+                                      _statusLabel(status), 
+                                      style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 10),
+                                      textAlign: TextAlign.center,
+                                      softWrap: true,
+                                    ),
+                                  ),
                                 ),
                               ),
                             );
@@ -478,10 +486,17 @@ class _EmployeeHistoryTabState extends State<EmployeeHistoryTab> {
   Widget _legendItem(Color color, String label, int count) {
     return Row(
       mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Container(width: 8, height: 8, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+        Container(margin: const EdgeInsets.only(top: 4), width: 8, height: 8, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
         const SizedBox(width: 6),
-        Text('$label ($count)', style: TextStyle(color: Colors.grey.shade600, fontSize: 12, fontWeight: FontWeight.w500)),
+        Flexible(
+          child: Text(
+            '$label ($count)', 
+            style: TextStyle(color: Colors.grey.shade600, fontSize: 12, fontWeight: FontWeight.w500),
+            softWrap: true,
+          ),
+        ),
       ],
     );
   }

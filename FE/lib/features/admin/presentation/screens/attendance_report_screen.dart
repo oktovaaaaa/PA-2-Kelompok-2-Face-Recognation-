@@ -1002,7 +1002,7 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
               _legendItem(const Color(0xFF818CF8), 'Aktif', size: 10),
               _legendItem(Colors.red, 'Alpha', size: 10),
               _legendItem(Colors.grey.shade400, 'Mangkir', size: 10),
-              _legendItem(Colors.deepPurple, 'Lupa Pulang', size: 10),
+              _legendItem(const Color(0xFFD946EF), 'Telat & PJK', size: 10),
             ],
           ),
         ],
@@ -1099,10 +1099,11 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
   Widget _legendItem(Color color, String label, {double? size}) {
     return Row(
       mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Container(width: 8, height: 8, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+        Container(margin: const EdgeInsets.only(top: 4), width: 8, height: 8, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
         const SizedBox(width: 6),
-        Text(label, style: TextStyle(color: Colors.grey.shade700, fontSize: size ?? 11)),
+        Flexible(child: Text(label, style: TextStyle(color: Colors.grey.shade700, fontSize: size ?? 11), softWrap: true)),
       ],
     );
   }
@@ -1118,7 +1119,8 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
       case 'ABSENT': statusColor = Colors.red; statusLabel = 'Alpha'; break;
       case 'NOT_YET': statusColor = Colors.grey; statusLabel = 'Belum Hadir'; break;
       case 'WORKING': statusColor = Color(0xFF818CF8); statusLabel = 'Sedang Bekerja'; break; // Indigo shade
-      case 'EARLY_LEAVE': statusColor = Colors.deepPurple; statusLabel = 'Pulang di Jam Kerja'; break;
+      case 'EARLY_LEAVE': statusColor = const Color(0xFFF97316); statusLabel = 'Pulang di Jam Kerja'; break;
+      case 'LATE_EARLY_LEAVE': statusColor = const Color(0xFFD946EF); statusLabel = 'Terlambat & Pulang di Jam Kerja'; break;
       case 'LEAVE': 
       case 'IZIN': statusColor = Colors.blue; statusLabel = 'Izin'; break;
       case 'SICK': 
@@ -1152,10 +1154,18 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(color: statusColor.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-                child: Text(statusLabel, style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 10)),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 110),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(color: statusColor.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                  child: Text(
+                    statusLabel, 
+                    style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 10),
+                    textAlign: TextAlign.center,
+                    softWrap: true,
+                  ),
+                ),
               ),
               const SizedBox(height: 4),
               Text(
