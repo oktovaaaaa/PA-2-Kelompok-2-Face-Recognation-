@@ -1,5 +1,6 @@
 // lib/features/admin/presentation/screens/tabs/admin_home_tab.dart
 
+import 'dart:async';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -34,6 +35,8 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
   final _repo = AuthRepository();
   bool _loadingInvite = false;
   String _generatedToken = '';
+  Timer? _inviteTimer;
+  int _countdown = 30;
   final GlobalKey _qrKey = GlobalKey();
   String? _userName;
   final _statusLabels = {'PENDING': 'Menunggu', 'APPROVED': 'Disetujui', 'REJECTED': 'Ditolak'};
@@ -58,6 +61,31 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
     _loadSummary();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<NotificationProvider>().fetchNotifications();
+    });
+  }
+
+  @override
+  void dispose() {
+    _inviteTimer?.cancel();
+    super.dispose();
+  }
+
+  void _startInviteTimer() {
+    _inviteTimer?.cancel();
+    _countdown = 30;
+    _inviteTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (mounted) {
+        setState(() {
+          if (_countdown <= 1) {
+            _countdown = 0;
+            timer.cancel();
+          } else {
+            _countdown--;
+          }
+        });
+      } else {
+        timer.cancel();
+      }
     });
   }
 
@@ -98,12 +126,13 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
   }
 
   Future<void> _generateInvite() async {
+    if (_countdown > 0) return;
     setState(() => _loadingInvite = true);
     try {
       final companyId = await SessionStorage.getCompanyId() ?? '';
       final data = await _repo.generateInvite(companyId);
       _generatedToken = (data['token'] ?? '').toString();
-      setState(() {});
+      _startInviteTimer();
     } catch (e) {
       final msg = ErrorMapper.map(e);
       if (!mounted) return;
@@ -460,11 +489,11 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
                   icon: Icons.qr_code_2_rounded,
                   color: const Color(0xFF0F172A),
                   title: 'Generate Undangan',
-                  subtitle: 'Buat Token & QR Code rekrutmen',
-                  onTap: _loadingInvite ? null : _generateInvite,
+                  subtitle: _countdown > 0 ? 'Tersedia dalam ${_countdown}s' : 'Buat Token & QR Code rekrutmen',
+                  onTap: (_loadingInvite || _countdown > 0) ? null : _generateInvite,
                   trailing: _loadingInvite
                       ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0F172A)))
-                      : null,
+                      : (_countdown > 0 ? Text('${_countdown}s', style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)) : null),
                 ),
                 
                 if (_generatedToken.isNotEmpty) ...[
@@ -505,7 +534,11 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
                                 border: Border.all(color: Colors.grey.shade100, width: 2),
                               ),
                               padding: const EdgeInsets.all(16),
-                              child: QrImageView(data: _generatedToken, version: QrVersions.auto, size: 200.0),
+                              child: Stack(
+                                children: [
+                                  QrImageView(data: _generatedToken, version: QrVersions.auto, size: 200.0),
+                                ],
+                              ),
                             ),
                           ),
                           const SizedBox(height: 24),
@@ -535,17 +568,41 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
                           const SizedBox(height: 16),
                           SizedBox(
                             width: double.infinity,
-                            child: ElevatedButton.icon(
-                              onPressed: _saveQrCode,
-                              icon: const Icon(Icons.file_download_rounded),
-                              label: const Text('Simpan Ke Galeri', style: TextStyle(fontWeight: FontWeight.bold)),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF0F172A),
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(vertical: 16),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                                elevation: 0,
-                              ),
+                            child: Column(
+                              children: [
+                                ElevatedButton.icon(
+                                  onPressed: (_loadingInvite || _countdown > 0) ? null : _generateInvite,
+                                  icon: _loadingInvite 
+                                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                    : const Icon(Icons.refresh_rounded),
+                                  label: Text(
+                                    _countdown > 0 ? 'Tunggu (${_countdown}s)' : 'Segarkan Barcode',
+                                    style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                                  ),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF0F172A),
+                                    foregroundColor: Colors.white,
+                                    disabledBackgroundColor: Colors.grey.shade200,
+                                    padding: const EdgeInsets.symmetric(vertical: 16),
+                                    minimumSize: const Size(double.infinity, 54),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                    elevation: 0,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                OutlinedButton.icon(
+                                  onPressed: _saveQrCode,
+                                  icon: const Icon(Icons.file_download_rounded),
+                                  label: const Text('Simpan Ke Galeri', style: TextStyle(fontWeight: FontWeight.bold)),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: const Color(0xFF0F172A),
+                                    side: BorderSide(color: Colors.grey.shade300),
+                                    padding: const EdgeInsets.symmetric(vertical: 16),
+                                    minimumSize: const Size(double.infinity, 54),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],

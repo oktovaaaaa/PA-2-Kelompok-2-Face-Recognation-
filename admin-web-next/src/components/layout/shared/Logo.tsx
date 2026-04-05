@@ -6,9 +6,6 @@ import type { CSSProperties } from 'react'
 // Third-party Imports
 import styled from '@emotion/styled'
 
-// Component Imports
-import MaterioLogo from '@core/svg/Logo'
-
 // Config Imports
 import themeConfig from '@configs/themeConfig'
 
@@ -29,7 +26,7 @@ const LogoText = styled.span<LogoTextProps>`
 const Logo = ({ color }: { color?: CSSProperties['color'] }) => {
   return (
     <div className='flex items-center min-bs-[24px]'>
-      <MaterioLogo className='text-[22px] text-primary' />
+      <img src='/images/facrec.png' alt='Logo' width={32} height={32} className='object-contain' />
       <LogoText color={color}>{themeConfig.templateName}</LogoText>
     </div>
   )

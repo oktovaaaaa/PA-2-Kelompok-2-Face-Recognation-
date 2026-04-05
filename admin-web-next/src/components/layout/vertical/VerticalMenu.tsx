@@ -103,6 +103,9 @@ const VerticalMenu = ({ scrollMenu }: { scrollMenu: (container: any, isPerfectSc
           <MenuItem href='/operasional' icon={<i className='ri-settings-4-line' />}>
             Pengaturan Operasional
           </MenuItem>
+          <MenuItem href='/template-dashboard' icon={<i className='ri-layout-grid-line' />}>
+            Template Dashboard
+          </MenuItem>
           <MenuItem href='/card-basic' icon={<i className='ri-bar-chart-box-line' />}>
             Kartu Statistik
           </MenuItem>

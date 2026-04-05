@@ -20,6 +20,46 @@ import (
 	"sort"
 )
 
+// LateTier representasi denda keterlambatan berjenjang (sudah didefinisikan di payroll_handler.go)
+
+// calculateLatePenalty menghitung denda berdasarkan durasi keterlambatan dan tiers
+func calculateLatePenalty(now, checkInEnd time.Time, basePenalty float64, tiersJSON string) float64 {
+	lateDuration := now.Sub(checkInEnd)
+	if lateDuration <= 0 {
+		return 0
+	}
+
+	// Default ke denda dasar
+	penalty := basePenalty
+
+	if tiersJSON != "" {
+		var tiers []LateTier
+		if err := json.Unmarshal([]byte(tiersJSON), &tiers); err == nil && len(tiers) > 0 {
+			// Sort tiers berdasarkan jam (terbesar ke terkecil) untuk cari tier tertinggi yang masuk
+			sort.Slice(tiers, func(i, j int) bool {
+				return tiers[i].Hours > tiers[j].Hours
+			})
+
+			// Hitung jam keterlambatan (pembulatan ke atas: 1 menit telat = jam ke-1)
+			lateMinutes := lateDuration.Minutes()
+			lateHours := int(lateMinutes / 60)
+			if int(lateMinutes)%60 > 0 {
+				lateHours++
+			}
+
+			// Cari denda yang sesuai
+			for _, tier := range tiers {
+				if lateHours >= tier.Hours {
+					penalty = tier.Penalty
+					break
+				}
+			}
+		}
+	}
+
+	return penalty
+}
+
 // isHoliday mengecek apakah tanggal tertentu adalah hari libur (manual atau akhir pekan)
 func isHoliday(companyID string, t time.Time) (bool, string) {
 	var settings models.AttendanceSettings
@@ -85,9 +125,11 @@ func CheckIn(c *gin.Context) {
 	// Tentukan Status: LATE jika lewat dari CheckInEnd
 	status := "PRESENT"
 	var deduction float64 = 0
-	if now.After(parseT(today, settings.CheckInEnd, now.Location())) {
+	checkInEndT := parseT(today, settings.CheckInEnd, now.Location())
+
+	if now.After(checkInEndT) {
 		status = "LATE"
-		deduction = settings.LatePenalty
+		deduction = calculateLatePenalty(now, checkInEndT, settings.LatePenalty, settings.LatePenaltyTiers)
 	}
 
 	// Cek apakah sudah check-in hari ini
@@ -132,8 +174,17 @@ func CheckOut(c *gin.Context) {
 	}
 
 	// Validasi waktu check-out
-	if !isTimeInRange(now, settings.CheckOutStart, settings.CheckOutEnd) {
-		utils.Error(c, fmt.Sprintf("Check-out hanya diperbolehkan antara %s - %s", settings.CheckOutStart, settings.CheckOutEnd))
+	// Jika pulang sebelum CheckOutStart, anggap EARLY_LEAVE dan kena denda
+	checkOutStartT := parseT(today, settings.CheckOutStart, now.Location())
+	checkOutEndT := parseT(today, settings.CheckOutEnd, now.Location())
+
+	isEarlyLeave := false
+	if now.Before(checkOutStartT) {
+		isEarlyLeave = true
+	}
+
+	if now.After(checkOutEndT) {
+		utils.Error(c, "Batas waktu absensi untuk hari ini sudah berakhir (Alpha)")
 		return
 	}
 
@@ -153,6 +204,10 @@ func CheckOut(c *gin.Context) {
 	}
 
 	att.CheckOutTime = &now
+	if isEarlyLeave {
+		att.Status = "EARLY_LEAVE"
+		att.SalaryDeduction += settings.EarlyLeavePenalty
+	}
 	database.DB.Save(&att)
 
 	utils.Success(c, "Check-out berhasil", gin.H{
@@ -459,6 +514,7 @@ func AdminGetAttendanceHistory(c *gin.Context) {
 		models.Attendance
 		UserName  string `json:"user_name"`
 		UserEmail string `json:"user_email"`
+		PhotoURL  string `json:"photo_url"`
 		IsVirtual bool   `json:"is_virtual"` // Penanda data ini Alpha otomatis
 	}
 	var finalResult []AttendanceResult
@@ -501,6 +557,7 @@ func AdminGetAttendanceHistory(c *gin.Context) {
 						Attendance: newAtt,
 						UserName:   emp.Name,
 						UserEmail:  emp.Email,
+						PhotoURL:   emp.PhotoURL,
 						IsVirtual:  false,
 					})
 				}
@@ -530,6 +587,7 @@ func AdminGetAttendanceHistory(c *gin.Context) {
 						},
 						UserName:  emp.Name,
 						UserEmail: emp.Email,
+						PhotoURL:  emp.PhotoURL,
 						IsVirtual: true,
 					})
 				} else if !isAlpha && dateStr == today && (statusFilter == "" || statusFilter == "ALL") {
@@ -544,6 +602,7 @@ func AdminGetAttendanceHistory(c *gin.Context) {
 						},
 						UserName:  emp.Name,
 						UserEmail: emp.Email,
+						PhotoURL:  emp.PhotoURL,
 						IsVirtual: true,
 					})
 				}
@@ -618,17 +677,18 @@ func UpdateAttendanceSettings(c *gin.Context) {
 	adminUser := userCtx.(models.User)
 
 	var body struct {
-		CheckInStart     string                   `json:"check_in_start"`
-		CheckInEnd       string                   `json:"check_in_end"`
-		CheckOutStart    string                   `json:"check_out_start"`
-		CheckOutEnd      string                   `json:"check_out_end"`
-		AlphaPenalty     float64                  `json:"alpha_penalty"`
-		LatePenalty      float64                  `json:"late_penalty"`
-		LatePenaltyTiers []map[string]interface{} `json:"late_penalty_tiers"`
-		WorkDays         string                   `json:"work_days"`
+		CheckInStart     string      `json:"check_in_start"`
+		CheckInEnd       string      `json:"check_in_end"`
+		CheckOutStart    string      `json:"check_out_start"`
+		CheckOutEnd      string      `json:"check_out_end"`
+		AlphaPenalty      float64     `json:"alpha_penalty"`
+		LatePenalty       float64     `json:"late_penalty"`
+		LatePenaltyTiers  interface{} `json:"late_penalty_tiers"`
+		EarlyLeavePenalty float64     `json:"early_leave_penalty"`
+		WorkDays          string      `json:"work_days"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
-		utils.Error(c, "Data tidak valid")
+		utils.Error(c, "Data tidak valid: "+err.Error())
 		return
 	}
 
@@ -645,13 +705,22 @@ func UpdateAttendanceSettings(c *gin.Context) {
 	settings.CheckOutEnd = body.CheckOutEnd
 	settings.AlphaPenalty = body.AlphaPenalty
 	settings.LatePenalty = body.LatePenalty
+	settings.EarlyLeavePenalty = body.EarlyLeavePenalty
 	settings.WorkDays = body.WorkDays
 
-	// Marshal tiers to string for DB storage
-	tiersJSON, _ := json.Marshal(body.LatePenaltyTiers)
-	settings.LatePenaltyTiers = string(tiersJSON)
+	// Handle LatePenaltyTiers flexibly (string or array)
+	switch v := body.LatePenaltyTiers.(type) {
+	case string:
+		settings.LatePenaltyTiers = v
+	default:
+		tiersJSON, _ := json.Marshal(v)
+		settings.LatePenaltyTiers = string(tiersJSON)
+	}
 
-	database.DB.Save(&settings)
+	if err := database.DB.Save(&settings).Error; err != nil {
+		utils.Error(c, "Gagal menyimpan pengaturan: "+err.Error())
+		return
+	}
 	utils.Success(c, "Pengaturan absensi berhasil diperbarui", settings)
 }
 
@@ -705,20 +774,25 @@ func AdminGetDashboardSummary(c *gin.Context) {
 
 	if now.After(checkOutEndT) {
 		// Jika sudah lewat jam pulang:
-		// Yang tidak absen sama sekali = ALPHA
-		// Yang check-in tapi tidak check-out = Pulang di jam kerja (early_leave)
-		absentCount = notCheckedInYet
+		// Yang tidak absen sama sekali = ALPHA (HANYA JIKA BUKAN HARI LIBUR)
+		if isHold {
+			absentCount = 0
+		} else {
+			absentCount = notCheckedInYet
+		}
 		earlyLeaveCount = working
 		displayWorking = 0
 		notYetCount = 0
 	} else {
 		// Jika masih dalam jam kerja:
 		// Alpha diset 0 agar dashboard tidak merah prematur
-		// Yang tidak absen = Belum Absen (not_yet)
 		absentCount = 0
 		earlyLeaveCount = 0
 		displayWorking = working
 		notYetCount = notCheckedInYet
+		if isHold {
+			notYetCount = 0
+		}
 	}
 
 	utils.Success(c, "Dashboard summary", gin.H{
@@ -932,16 +1006,20 @@ func AdminGetDetailedDashboardSummary(c *gin.Context) {
 				}
 
 				isAlpha := false
-				if dateStr < today {
-					isAlpha = true
-				} else if dateStr == today && now.After(checkOutEndT) {
-					isAlpha = true
+				isHold, _ := isHoliday(adminUser.CompanyID, curr) // Cek libur untuk tanggal curr
+
+				if !isHold {
+					if dateStr < today {
+						isAlpha = true
+					} else if dateStr == today && now.After(checkOutEndT) {
+						isAlpha = true
+					}
 				}
 
 				if filter == "today" || (start == today && end == today) {
 					if isAlpha {
 						summary["absent"]++
-					} else {
+					} else if !isHold {
 						summary["not_yet"]++
 					}
 				} else {
@@ -1027,9 +1105,12 @@ func AdminGetAttendanceTrend(c *gin.Context) {
                     regDate := emp.CreatedAt.In(loc).Format("2006-01-02")
                     if dateStr < regDate { continue }
                     if !mRecordMap[dateStr][emp.ID] {
-                        // Jika hari terlewati, Alpha
-                        if dateStr < today || (dateStr == today && now.After(checkOutEndT)) {
-                            a++
+                        // Jika hari terlewati, Alpha (HANYA JIKA BUKAN HARI LIBUR)
+                        isHold, _ := isHoliday(adminUser.CompanyID, d)
+                        if !isHold {
+                            if dateStr < today || (dateStr == today && now.After(checkOutEndT)) {
+                                a++
+                            }
                         }
                     }
                 }
@@ -1058,20 +1139,30 @@ func AdminGetAttendanceTrend(c *gin.Context) {
 			database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date = ? AND (status = 'LEAVE' OR status = 'SICK')", adminUser.CompanyID, dateStr).Count(&ls)
 			database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date = ? AND status = 'EARLY_LEAVE'", adminUser.CompanyID, dateStr).Count(&el)
 
-            // Hitung Alpha (Gunakan logika yang sama: Hari lewat + tidak terdaftar record)
-            var a int64
-            var dailyRecords []string
-            database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date = ?", adminUser.CompanyID, dateStr).Pluck("user_id", &dailyRecords)
-            dMap := make(map[string]bool)
-            for _, uid := range dailyRecords { dMap[uid] = true }
+			// Hitung Alpha (Gunakan logika yang sama: Hari lewat + tidak terdaftar record)
+			var a int64
+			var dailyRecords []string
+			database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date = ?", adminUser.CompanyID, dateStr).Pluck("user_id", &dailyRecords)
+			dMap := make(map[string]bool)
+			for _, uid := range dailyRecords {
+				dMap[uid] = true
+			}
 
-            for _, emp := range employees {
-                regDate := emp.CreatedAt.In(loc).Format("2006-01-02")
-                if dateStr < regDate { continue }
-                if !dMap[emp.ID] {
-                   if dateStr < today || (dateStr == today && now.After(checkOutEndT)) { a++ }
-                }
-            }
+			for _, emp := range employees {
+				regDate := emp.CreatedAt.In(loc).Format("2006-01-02")
+				if dateStr < regDate {
+					continue
+				}
+				if !dMap[emp.ID] {
+					// Cek Hari Libur
+					isHold, _ := isHoliday(adminUser.CompanyID, d)
+					if !isHold {
+						if dateStr < today || (dateStr == today && now.After(checkOutEndT)) {
+							a++
+						}
+					}
+				}
+			}
 
 			presentData = append(presentData, float64(p))
 			lateData = append(lateData, float64(l))
@@ -1109,19 +1200,29 @@ func AdminGetAttendanceTrend(c *gin.Context) {
 			database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date = ? AND (status = 'LEAVE' OR status = 'SICK')", adminUser.CompanyID, dateStr).Count(&ls)
 			database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date = ? AND status = 'EARLY_LEAVE'", adminUser.CompanyID, dateStr).Count(&el)
 
-            var a int64
-            var weeklyRecords []string
-            database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date = ?", adminUser.CompanyID, dateStr).Pluck("user_id", &weeklyRecords)
-            dMap := make(map[string]bool)
-            for _, uid := range weeklyRecords { dMap[uid] = true }
+			var a int64
+			var weeklyRecords []string
+			database.DB.Model(&models.Attendance{}).Where("company_id = ? AND date = ?", adminUser.CompanyID, dateStr).Pluck("user_id", &weeklyRecords)
+			dMap := make(map[string]bool)
+			for _, uid := range weeklyRecords {
+				dMap[uid] = true
+			}
 
-            for _, emp := range employees {
-                regDate := emp.CreatedAt.In(loc).Format("2006-01-02")
-                if dateStr < regDate { continue }
-                if !dMap[emp.ID] {
-                   if dateStr < today || (dateStr == today && now.After(checkOutEndT)) { a++ }
-                }
-            }
+			for _, emp := range employees {
+				regDate := emp.CreatedAt.In(loc).Format("2006-01-02")
+				if dateStr < regDate {
+					continue
+				}
+				if !dMap[emp.ID] {
+					// Cek Hari Libur
+					isHold, _ := isHoliday(adminUser.CompanyID, d)
+					if !isHold {
+						if dateStr < today || (dateStr == today && now.After(checkOutEndT)) {
+							a++
+						}
+					}
+				}
+			}
 
 			presentData = append(presentData, float64(p))
 			lateData = append(lateData, float64(l))

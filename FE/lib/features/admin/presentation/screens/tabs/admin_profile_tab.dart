@@ -315,6 +315,10 @@ class _AdminProfileTabState extends State<AdminProfileTab> {
         text: _settings?['late_penalty'] != null
             ? CurrencyInputFormatter.formatNumber((_settings!['late_penalty'] as num).toInt())
             : '0');
+    final earlyLeavePenaltyCtrl = TextEditingController(
+        text: _settings?['early_leave_penalty'] != null
+            ? CurrencyInputFormatter.formatNumber((_settings!['early_leave_penalty'] as num).toInt())
+            : '0');
     
     // Parse work_days from settings
     List<String> workDays = (_settings?['work_days'] as String? ?? 'Monday,Tuesday,Wednesday,Thursday,Friday').split(',');
@@ -426,7 +430,7 @@ class _AdminProfileTabState extends State<AdminProfileTab> {
 
                     return _buildField(
                       latePenaltyCtrl, 
-                      'Denda Per Keterlambatan', 
+                      'Denda Per Keterlambatan Dasar', 
                       Icons.warning_amber_rounded,
                       keyboardType: TextInputType.number,
                       readOnly: hasTiers,
@@ -434,6 +438,15 @@ class _AdminProfileTabState extends State<AdminProfileTab> {
                       inputFormatters: hasTiers ? [] : [FilteringTextInputFormatter.digitsOnly, CurrencyInputFormatter()],
                     );
                   }
+                ),
+
+                _buildSectionLabel('Denda Pulang di Jam Kerja'),
+                _buildField(
+                  earlyLeavePenaltyCtrl, 
+                  'Denda Pulang Awal (Rp)', 
+                  Icons.exit_to_app_rounded,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly, CurrencyInputFormatter()]
                 ),
                 
                 const SizedBox(height: 12),
@@ -538,6 +551,7 @@ class _AdminProfileTabState extends State<AdminProfileTab> {
                         'alpha_penalty': CurrencyInputFormatter.unformat(penaltyCtrl.text.trim()).toDouble(),
                         'late_penalty': tiers.isNotEmpty ? 0 : CurrencyInputFormatter.unformat(latePenaltyCtrl.text.trim()).toDouble(),
                         'late_penalty_tiers': tiers,
+                        'early_leave_penalty': CurrencyInputFormatter.unformat(earlyLeavePenaltyCtrl.text.trim()).toDouble(),
                         'work_days': workDays.join(','),
                       });
                       if (!mounted) return;
@@ -747,6 +761,7 @@ class _AdminProfileTabState extends State<AdminProfileTab> {
                         _infoRow('Sanksi Terlambat', 'Rp ${CurrencyInputFormatter.formatNumber((_settings?['late_penalty'] as num?)?.toInt() ?? 0)}')
                       else
                         _infoRow('Sanksi Terlambat', 'Berjenjang (Aktif)'),
+                      _infoRow('Sanksi Pulang Awal', 'Rp ${CurrencyInputFormatter.formatNumber((_settings?['early_leave_penalty'] as num?)?.toInt() ?? 0)}'),
                     ],
                   ),
                   const SizedBox(height: 20),

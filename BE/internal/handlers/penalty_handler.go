@@ -89,15 +89,17 @@ func GetPenalties(c *gin.Context) {
 
 	query := database.DB.Preload("User").Preload("User.Position")
 
-	// If not admin, only show their own penalties
-	if user.Role != "ADMIN" {
-		query = query.Where("user_id = ?", user.ID)
-	} else {
-		// Admin filters
+	// Admin filters: Only show penalties for users in the same company
+	if user.Role == "ADMIN" {
+		query = query.Where("user_id IN (SELECT id FROM users WHERE company_id = ?)", user.CompanyID)
+		
 		filterUserID := c.Query("user_id")
 		if filterUserID != "" {
 			query = query.Where("user_id = ?", filterUserID)
 		}
+	} else {
+		// Employee only sees their own
+		query = query.Where("user_id = ?", user.ID)
 	}
 
 	// Date filters
@@ -111,13 +113,32 @@ func GetPenalties(c *gin.Context) {
 		query = query.Where("date LIKE ?", year+"-%%")
 	}
 
+	// Pagination
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 {
+		limit = 10
+	}
+	offset := (page - 1) * limit
+
+	var total int64
+	query.Model(&models.Penalty{}).Count(&total)
+
 	var penalties []models.Penalty
-	if err := query.Order("created_at DESC").Find(&penalties).Error; err != nil {
-		utils.Error(c, "Gagal mengambil data denda")
+	if err := query.Order("created_at DESC").Offset(offset).Limit(limit).Find(&penalties).Error; err != nil {
+		utils.Error(c, "Gagal mengambil data denda: "+err.Error())
 		return
 	}
 
-	utils.Success(c, "Berhasil mengambil data denda", penalties)
+	utils.Success(c, "Data denda berhasil diambil", gin.H{
+		"data":  penalties,
+		"total": total,
+		"page":  page,
+		"limit": limit,
+	})
 }
 
 // DeletePenalty - Admin removes a penalty
@@ -143,4 +164,25 @@ func DeletePenalty(c *gin.Context) {
 	generateSalary(userID, int(t.Month()), t.Year())
 
 	utils.Success(c, "Denda berhasil dihapus", nil)
+}
+
+// AdminGetPenaltyYears - Mengambil daftar tahun unik yang memiliki data denda untuk filter dinamis
+func AdminGetPenaltyYears(c *gin.Context) {
+	userCtx, _ := c.Get("user")
+	adminUser := userCtx.(models.User)
+
+	var years []string
+	// Mengambil 4 karakter pertama dari kolom date (YYYY)
+	err := database.DB.Model(&models.Penalty{}).
+		Where("user_id IN (SELECT id FROM users WHERE company_id = ?)", adminUser.CompanyID).
+		Select("DISTINCT(SUBSTRING(date, 1, 4)) as year").
+		Order("year desc").
+		Pluck("year", &years).Error
+
+	if err != nil {
+		utils.Error(c, "Gagal mengambil daftar tahun: "+err.Error())
+		return
+	}
+
+	utils.Success(c, "Berhasil mengambil daftar tahun", years)
 }

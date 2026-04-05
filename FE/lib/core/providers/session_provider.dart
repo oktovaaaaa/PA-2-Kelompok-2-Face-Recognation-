@@ -26,10 +26,9 @@ class SessionProvider extends ChangeNotifier {
     _cancelTimer();
     if (!authProvider.isAuthenticated) return; 
 
+    // Update last activity time but Don't start an inactivity timer for foreground use
+    // to strictly follow user request (lock only when backgrounded).
     _lastActiveTime = DateTime.now();
-    _inactivityTimer = Timer(const Duration(minutes: 15), () {
-      authProvider.lockSession();
-    });
   }
 
   void resetTimer() {

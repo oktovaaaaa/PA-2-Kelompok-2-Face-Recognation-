@@ -47,11 +47,14 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _checkBiometrics() async {
     try {
-      _canCheckBiometrics = await _localAuth.canCheckBiometrics || await _localAuth.isDeviceSupported();
-      setState(() {});
-      if (widget.pinOnlyMode && _canCheckBiometrics) {
-        _authenticateBiometrics();
-      }
+      final isSupported = await _localAuth.isDeviceSupported();
+      final canCheck = await _localAuth.canCheckBiometrics;
+      _canCheckBiometrics = isSupported && canCheck;
+      
+      if (mounted) setState(() {});
+      
+      // Removed automatic _authenticateBiometrics call to prevent sudden dialogs.
+      // Users can now trigger it manually using the biometric icon.
     } catch (_) {}
   }
 
@@ -189,31 +192,32 @@ class _LoginScreenState extends State<LoginScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Align(
-                alignment: Alignment.centerLeft,
-                child: GestureDetector(
-                  onTap: () {
-                    if (Navigator.canPop(context)) {
-                      Navigator.pop(context);
-                    } else {
-                      // Jika root (misal setelah registrasi), panggil LandingScreen
-                      Navigator.pushAndRemoveUntil(
-                        context,
-                        MaterialPageRoute(builder: (_) => const LandingScreen()),
-                        (_) => false,
-                      );
-                    }
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(12),
+              if (!pinOnly)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: GestureDetector(
+                    onTap: () {
+                      if (Navigator.canPop(context)) {
+                        Navigator.pop(context);
+                      } else {
+                        // Jika root (misal setelah registrasi), panggil LandingScreen
+                        Navigator.pushAndRemoveUntil(
+                          context,
+                          MaterialPageRoute(builder: (_) => const LandingScreen()),
+                          (_) => false,
+                        );
+                      }
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
                     ),
-                    child: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
                   ),
                 ),
-              ),
               const SizedBox(height: 32),
               Text(
                 pinOnly ? 'Login PIN' : 'Selamat Datang!',
@@ -257,6 +261,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             length: 6,
                             obscureText: true,
                             keyboardType: TextInputType.number,
+                            onCompleted: (_) => _loginPin(),
                             defaultPinTheme: PinTheme(
                               width: 48,
                               height: 56,
@@ -278,6 +283,14 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                             ),
                           ),
+                          if (_canCheckBiometrics) ...[
+                            const SizedBox(height: 24),
+                            TextButton.icon(
+                              onPressed: _authenticateBiometrics,
+                              icon: const Icon(Icons.fingerprint, color: Color(0xFF2563EB)),
+                              label: const Text('Gunakan Biometrik', style: TextStyle(color: Color(0xFF2563EB))),
+                            ),
+                          ],
                           const SizedBox(height: 32),
                           SizedBox(
                             width: double.infinity,

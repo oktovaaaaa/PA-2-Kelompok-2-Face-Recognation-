@@ -57,10 +57,21 @@ const HolidayPage = () => {
     if (!settings) return
     setSaveLoading(true)
     try {
-      await holidayService.updateSettings({
+      // Pastikan late_penalty_tiers dikirim sebagai objek/array, bukan string JSON mentah
+      const payload = {
         ...settings,
         work_days: workDays.join(',')
-      })
+      }
+      
+      if (typeof payload.late_penalty_tiers === 'string') {
+        try {
+          payload.late_penalty_tiers = JSON.parse(payload.late_penalty_tiers)
+        } catch (e) {
+          console.error("Failed to parse tiers", e)
+        }
+      }
+
+      await holidayService.updateSettings(payload)
       showNotification('Jadwal kerja rutin berhasil diperbarui!', 'success')
     } catch (error) {
       showNotification('Gagal menyimpan jadwal kerja.', 'error')

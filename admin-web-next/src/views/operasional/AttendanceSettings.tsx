@@ -4,7 +4,8 @@
 import { useState, useEffect } from 'react'
 import { 
   Card, CardHeader, CardContent, Grid, TextField, 
-  Button, Typography, Box, CircularProgress, IconButton 
+  Button, Typography, Box, CircularProgress, IconButton,
+  Divider, InputAdornment, Tooltip
 } from '@mui/material'
 import { settingService, AttendanceSettings, PenaltyTier } from '@/libs/settingService'
 import { useNotification } from '@/contexts/NotificationContext'
@@ -12,15 +13,41 @@ import { useNotification } from '@/contexts/NotificationContext'
 const AttendanceSettingsTab = () => {
   const { showNotification } = useNotification()
   const [settings, setSettings] = useState<AttendanceSettings | null>(null)
+  const [localTiers, setLocalTiers] = useState<PenaltyTier[]>([])
   const [loading, setLoading] = useState(true)
   const [saveLoading, setSaveLoading] = useState(false)
+
+  // Helper untuk format angka dengan titik
+  const formatNumber = (val: number | string) => {
+    if (val === undefined || val === null || val === '') return ''
+    const str = val.toString().replace(/\D/g, '')
+    return str.replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+  }
+
+  // Helper untuk parse string ber-titik kembali ke number
+  const parseNumber = (val: string) => {
+    const clean = val.replace(/\./g, '')
+    return parseInt(clean, 10) || 0
+  }
 
   const loadSettings = async () => {
     try {
       const data = await settingService.getAttendanceSettings()
       setSettings(data)
+      
+      // Parse late_penalty_tiers JSON string from backend: [{"hours": 1, "penalty": 10000}]
+      if (data.late_penalty_tiers) {
+        try {
+          const parsed = JSON.parse(data.late_penalty_tiers)
+          setLocalTiers(parsed)
+        } catch (e) {
+          console.error("Error parsing tiers:", e)
+          setLocalTiers([])
+        }
+      }
     } catch (error) {
       console.error(error)
+      showNotification('Gagal memuat pengaturan operasional.', 'error')
     } finally {
       setLoading(false)
     }
@@ -34,8 +61,12 @@ const AttendanceSettingsTab = () => {
     if (!settings) return
     setSaveLoading(true)
     try {
-      await settingService.updateAttendanceSettings(settings)
-      showNotification('Pengaturan absensi berhasil disimpan!', 'success')
+      const payload = {
+        ...settings,
+        late_penalty_tiers: JSON.stringify(localTiers)
+      }
+      await settingService.updateAttendanceSettings(payload)
+      showNotification('Pengaturan operasional berhasil diperbarui!', 'success')
       loadSettings()
     } catch (error) {
       showNotification('Gagal menyimpan pengaturan.', 'error')
@@ -45,65 +76,66 @@ const AttendanceSettingsTab = () => {
   }
 
   const addTier = () => {
-    if (!settings) return
-    const newTier: PenaltyTier = { late_minutes: 0, amount: 0 }
-    setSettings({
-      ...settings,
-      late_tiers: [...(settings.late_tiers || []), newTier]
-    })
+    setLocalTiers([...localTiers, { hours: 0, penalty: 0 }])
   }
 
   const removeTier = (index: number) => {
-    if (!settings) return
-    const newTiers = [...settings.late_tiers]
+    const newTiers = [...localTiers]
     newTiers.splice(index, 1)
-    setSettings({ ...settings, late_tiers: newTiers })
+    setLocalTiers(newTiers)
   }
 
   const updateTier = (index: number, field: keyof PenaltyTier, value: number) => {
-    if (!settings) return
-    const newTiers = [...settings.late_tiers]
+    const newTiers = [...localTiers]
     newTiers[index] = { ...newTiers[index], [field]: value }
-    setSettings({ ...settings, late_tiers: newTiers })
+    setLocalTiers(newTiers)
   }
 
-  if (loading) return <CircularProgress sx={{ display: 'block', m: 'auto', mt: 10 }} />
+  if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', p: 10 }}><CircularProgress /></Box>
 
   return (
     <Grid container spacing={6}>
-      {/* 1. Jam Kerja */}
-      <Grid item xs={12} md={6}>
-        <Card>
-          <CardHeader title="Jam Kerja & Toleransi" subheader="Atur jendela waktu absensi" />
-          <CardContent>
-            <Grid container spacing={4}>
-              <Grid item xs={6}>
-                <TextField 
-                  fullWidth label="Check-in Start" type="time" InputLabelProps={{ shrink: true }}
-                  value={settings?.check_in_start || ''}
-                  onChange={e => setSettings(s => s ? {...s, check_in_start: e.target.value} : null)}
-                />
+      {/* 1. Jam Kerja & Toleransi */}
+      <Grid item xs={12} md={7}>
+        <Card variant="outlined" sx={{ height: '100%' }}>
+          <CardHeader 
+            title="Siklus Waktu Kerja" 
+            titleTypographyProps={{ variant: 'h6', fontWeight: '700' }}
+            avatar={<i className='ri-time-line' style={{ fontSize: '1.5rem', color: '#3b82f6' }} />}
+            subheader="Tentukan jendela waktu absensi masuk dan pulang" 
+          />
+          <Divider />
+          <CardContent sx={{ pt: 6 }}>
+            <Grid container spacing={6}>
+              <Grid item xs={12} sm={6}>
+                <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: '600' }}>Sesi Masuk (Check-in)</Typography>
+                <Box sx={{ display: 'flex', gap: 3 }}>
+                    <TextField 
+                        fullWidth label="Mulai" type="time" size="small" InputLabelProps={{ shrink: true }}
+                        value={settings?.check_in_start || ''}
+                        onChange={e => setSettings(s => s ? {...s, check_in_start: e.target.value} : null)}
+                    />
+                    <TextField 
+                        fullWidth label="Selesai" type="time" size="small" InputLabelProps={{ shrink: true }}
+                        value={settings?.check_in_end || ''}
+                        onChange={e => setSettings(s => s ? {...s, check_in_end: e.target.value} : null)}
+                    />
+                </Box>
               </Grid>
-              <Grid item xs={6}>
-                <TextField 
-                  fullWidth label="Check-in End" type="time" InputLabelProps={{ shrink: true }}
-                  value={settings?.check_in_end || ''}
-                  onChange={e => setSettings(s => s ? {...s, check_in_end: e.target.value} : null)}
-                />
-              </Grid>
-              <Grid item xs={6}>
-                <TextField 
-                  fullWidth label="Check-out Start" type="time" InputLabelProps={{ shrink: true }}
-                  value={settings?.check_out_start || ''}
-                  onChange={e => setSettings(s => s ? {...s, check_out_start: e.target.value} : null)}
-                />
-              </Grid>
-              <Grid item xs={6}>
-                <TextField 
-                  fullWidth label="Check-out End" type="time" InputLabelProps={{ shrink: true }}
-                  value={settings?.check_out_end || ''}
-                  onChange={e => setSettings(s => s ? {...s, check_out_end: e.target.value} : null)}
-                />
+              <Grid item xs={12} sm={6}>
+                <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: '600' }}>Sesi Pulang (Check-out)</Typography>
+                <Box sx={{ display: 'flex', gap: 3 }}>
+                    <TextField 
+                        fullWidth label="Mulai" type="time" size="small" InputLabelProps={{ shrink: true }}
+                        value={settings?.check_out_start || ''}
+                        onChange={e => setSettings(s => s ? {...s, check_out_start: e.target.value} : null)}
+                    />
+                    <TextField 
+                        fullWidth label="Selesai" type="time" size="small" InputLabelProps={{ shrink: true }}
+                        value={settings?.check_out_end || ''}
+                        onChange={e => setSettings(s => s ? {...s, check_out_end: e.target.value} : null)}
+                    />
+                </Box>
               </Grid>
             </Grid>
           </CardContent>
@@ -111,24 +143,49 @@ const AttendanceSettingsTab = () => {
       </Grid>
 
       {/* 2. Denda Dasar */}
-      <Grid item xs={12} md={6}>
-        <Card>
-          <CardHeader title="Kebijakan Denda Dasar" subheader="Denda standar absensi" />
-          <CardContent>
-            <Grid container spacing={4}>
+      <Grid item xs={12} md={5}>
+        <Card variant="outlined" sx={{ height: '100%' }}>
+          <CardHeader 
+            title="Denda Dasar Absensi" 
+            titleTypographyProps={{ variant: 'h6', fontWeight: '700' }}
+            avatar={<i className='ri-money-dollar-circle-line' style={{ fontSize: '1.5rem', color: '#ef4444' }} />}
+            subheader="Kebijakan denda ketidakhadiran" 
+          />
+          <Divider />
+          <CardContent sx={{ pt: 6 }}>
+            <Grid container spacing={5}>
               <Grid item xs={12}>
                 <TextField 
-                  fullWidth label="Denda Alpha (Rp)" type="number"
-                  value={settings?.penalty_alpha || 0}
-                  onChange={e => setSettings(s => s ? {...s, penalty_alpha: parseInt(e.target.value)} : null)}
+                  fullWidth label="Denda Alpha / Tidak Hadir"
+                  placeholder="Contoh: 150.000"
+                  value={formatNumber(settings?.alpha_penalty || 0)}
+                  onChange={e => setSettings(s => s ? {...s, alpha_penalty: parseNumber(e.target.value)} : null)}
+                  InputProps={{
+                    startAdornment: <InputAdornment position="start">Rp</InputAdornment>,
+                  }}
+                  helperText="Denda per hari jika tidak ada record absensi"
                 />
               </Grid>
               <Grid item xs={12}>
                 <TextField 
-                  fullWidth label="Denda Telat Dasar (Rp)" type="number"
-                  helperText="Denda yang langsung dikenakan saat telat 1 menit"
-                  value={settings?.penalty_late_base || 0}
-                  onChange={e => setSettings(s => s ? {...s, penalty_late_base: parseInt(e.target.value)} : null)}
+                  fullWidth label="Denda Keterlambatan Dasar"
+                  value={formatNumber(settings?.late_penalty || 0)}
+                  onChange={e => setSettings(s => s ? {...s, late_penalty: parseNumber(e.target.value)} : null)}
+                  InputProps={{
+                    startAdornment: <InputAdornment position="start">Rp</InputAdornment>,
+                  }}
+                  helperText="Denda yang dikenakan segera setelah telat 1 menit"
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <TextField 
+                  fullWidth label="Denda Pulang di Jam Kerja"
+                  value={formatNumber(settings?.early_leave_penalty || 0)}
+                  onChange={e => setSettings(s => s ? {...s, early_leave_penalty: parseNumber(e.target.value)} : null)}
+                  InputProps={{
+                    startAdornment: <InputAdornment position="start">Rp</InputAdornment>,
+                  }}
+                  helperText="Denda jika pulang sebelum waktu sesi pulang dibuka"
                 />
               </Grid>
             </Grid>
@@ -138,51 +195,67 @@ const AttendanceSettingsTab = () => {
 
       {/* 3. Denda Berjenjang */}
       <Grid item xs={12}>
-        <Card>
+        <Card variant="outlined">
           <CardHeader 
-            title="Denda Telat Berjenjang" 
-            subheader="Tambahkan denda tambahan berdasarkan durasi keterlambatan"
-            action={<Button startIcon={<i className='ri-add-line'/>} onClick={addTier}>Tambah Jenjang</Button>}
+            title="Denda Keterlambatan Berjenjang (Opsional)" 
+            titleTypographyProps={{ variant: 'h6', fontWeight: '700' }}
+            avatar={<i className='ri-line-chart-line' style={{ fontSize: '1.5rem', color: '#f59e0b' }} />}
+            subheader="Tambahkan denda tambahan berdasarkan durasi jam terlambat"
+            action={
+              <Button 
+                variant="outlined" size="small" startIcon={<i className='ri-add-line'/>} 
+                onClick={addTier} sx={{ mt: 1, mr: 2 }}
+              >
+                Tambah Aturan
+              </Button>
+            }
           />
+          <Divider />
           <CardContent>
-            <Grid container spacing={4}>
-              {settings?.late_tiers?.map((tier, idx) => (
-                <Grid item xs={12} key={idx} sx={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                  <Typography fontWeight="bold">{idx + 1}.</Typography>
-                  <TextField 
-                    label="Jika Telat > (Menit)" type="number" size="small"
-                    value={tier.late_minutes}
-                    onChange={e => updateTier(idx, 'late_minutes', parseInt(e.target.value))}
-                  />
-                  <TextField 
-                    label="Denda Tambahan (Rp)" type="number" size="small"
-                    value={tier.amount}
-                    onChange={e => updateTier(idx, 'amount', parseInt(e.target.value))}
-                  />
-                  <IconButton color="error" onClick={() => removeTier(idx)}>
-                    <i className="ri-delete-bin-line" />
-                  </IconButton>
+            {localTiers.length === 0 ? (
+                <Box sx={{ py: 10, textAlign: 'center', bgcolor: 'action.hover', borderRadius: 2, border: '1px dashed', borderColor: 'divider' }}>
+                    <i className="ri-information-line" style={{ fontSize: '2rem', color: '#94a3b8' }} />
+                    <Typography color="textSecondary" sx={{ mt: 2 }}>Belum ada aturan denda berjenjang.</Typography>
+                </Box>
+            ) : (
+                <Grid container spacing={4}>
+                  {localTiers.map((tier, idx) => (
+                    <Grid item xs={12} key={idx} sx={{ display: 'flex', gap: 4, alignItems: 'center', py: 2, borderBottom: idx !== localTiers.length - 1 ? '1px solid' : 'none', borderColor: 'divider' }}>
+                      <Box sx={{ width: 40, height: 40, borderRadius: '50%', bgcolor: 'primary.main', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
+                        {idx + 1}
+                      </Box>
+                      <TextField 
+                        label="Jam Ke-" type="number" size="small" sx={{ width: 200 }}
+                        value={tier.hours}
+                        onChange={e => updateTier(idx, 'hours', parseInt(e.target.value))}
+                      />
+                      <TextField 
+                        label="Denda Tambahan" size="small" sx={{ width: 250 }}
+                        value={formatNumber(tier.penalty)}
+                        onChange={e => updateTier(idx, 'penalty', parseNumber(e.target.value))}
+                        InputProps={{ startAdornment: <InputAdornment position="start">Rp</InputAdornment> }}
+                      />
+                      <Tooltip title="Hapus Aturan">
+                        <IconButton color="error" onClick={() => removeTier(idx)} sx={{ ml: 'auto' }}>
+                            <i className="ri-delete-bin-7-line" />
+                        </IconButton>
+                      </Tooltip>
+                    </Grid>
+                  ))}
                 </Grid>
-              ))}
-              {(!settings?.late_tiers || settings.late_tiers.length === 0) && (
-                <Grid item xs={12}>
-                  <Typography color="textSecondary" align="center" sx={{ py: 4 }}>
-                    Belum ada denda berjenjang. Klik "Tambah Jenjang" untuk memulai.
-                  </Typography>
-                </Grid>
-              )}
-            </Grid>
+            )}
           </CardContent>
         </Card>
       </Grid>
 
-      {/* Save FAB/Button */}
-      <Grid item xs={12} sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+      <Grid item xs={12} sx={{ display: 'flex', justifyContent: 'flex-end', gap: 4, mt: 4 }}>
+        <Button variant="outlined" color="secondary" onClick={loadSettings} disabled={saveLoading}>Atur Ulang</Button>
         <Button 
           variant="contained" size="large" onClick={handleSave} disabled={saveLoading}
-          startIcon={saveLoading ? <CircularProgress size={20}/> : <i className='ri-save-line'/>}
+          startIcon={saveLoading ? <CircularProgress size={20} color="inherit"/> : <i className='ri-save-3-line'/>}
+          sx={{ px: 10 }}
         >
-          {saveLoading ? 'Menyimpan...' : 'Simpan Semua Pengaturan'}
+          {saveLoading ? 'Menyimpan...' : 'Simpan Konfigurasi'}
         </Button>
       </Grid>
     </Grid>

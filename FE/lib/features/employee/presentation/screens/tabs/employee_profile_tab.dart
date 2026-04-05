@@ -460,7 +460,7 @@ class _EmployeeProfileTabState extends State<EmployeeProfileTab> {
                               Text('Gaji Pokok Bulanan', style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 13)),
                               const SizedBox(height: 4),
                               Text(
-                                'Rp ${salary.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.')}',
+                                'Rp ${CurrencyInputFormatter.formatNumber(salary.toInt())}',
                                 style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
                               ),
                             ],
@@ -490,7 +490,7 @@ class _EmployeeProfileTabState extends State<EmployeeProfileTab> {
                     color: const Color(0xFF10B981),
                     onEdit: _editBankInfo,
                     rows: [
-                      _infoRow('Gaji Pokok', 'Rp ${salary.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.')}'),
+                      _infoRow('Gaji Pokok', 'Rp ${CurrencyInputFormatter.formatNumber(salary.toInt())}'),
                       _infoRow('Bank', _v('bank_name')),
                       _infoRow('No. Rekening', _v('bank_account_number')),
                     ],

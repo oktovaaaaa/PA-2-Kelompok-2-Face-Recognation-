@@ -127,6 +127,7 @@ func SetupRouter() *gin.Engine {
 		admin.POST("/penalties", handlers.CreatePenalty)
 		admin.GET("/penalties", handlers.GetPenalties)
 		admin.DELETE("/penalties/:id", handlers.DeletePenalty)
+		admin.GET("/penalties/years", handlers.AdminGetPenaltyYears)
 	}
 
 	// Protected Employee Routes

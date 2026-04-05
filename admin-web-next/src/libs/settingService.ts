@@ -10,6 +10,17 @@ const getAuthHeaders = () => {
     };
 };
 
+export const BASE_URL = 'http://localhost:8080';
+
+export const formatImageUrl = (url?: string) => {
+    if (!url) return undefined;
+    if (url.startsWith('http')) return url;
+    
+    // Ensure no double slashes
+    const cleanUrl = url.startsWith('/') ? url.slice(1) : url;
+    return `${BASE_URL}/${cleanUrl}`;
+};
+
 export interface Profile {
     id: string;
     name: string;
@@ -30,6 +41,36 @@ export interface Company {
     email: string;
     phone: string;
     logo_url?: string;
+}
+
+export interface PenaltyTier {
+    hours: number;
+    penalty: number;
+}
+
+export interface AttendanceSettings {
+    id: string;
+    company_id: string;
+    check_in_start: string;
+    check_in_end: string;
+    check_out_start: string;
+    check_out_end: string;
+    alpha_penalty: number;
+    late_penalty: number;
+    late_penalty_tiers: string; // JSON String from backend: [{"hours": 1, "penalty": 10000}]
+    early_leave_penalty: number;
+    work_days: string;
+}
+
+export interface ManualPenalty {
+    id: string;
+    user_id: string;
+    title: string;
+    amount: number;
+    date: string;
+    user?: {
+        name: string;
+    };
 }
 
 export const settingService = {
@@ -110,18 +151,36 @@ export const settingService = {
         return resData.data;
     },
 
-    // 4. Penalty Management (Non-absensi)
-    async getPenalties() {
-        const response = await fetch(`${API_URL}/admin/penalties`, {
+    // 4. Manual Penalty Management
+    async getManualPenalties(page: number = 1, limit: number = 10, month?: string, year?: string) {
+        let url = `${API_URL}/admin/penalties?page=${page}&limit=${limit}`;
+        if (month) url += `&month=${month}`;
+        if (year) url += `&year=${year}`;
+
+        const response = await fetch(url, {
             method: 'GET',
             headers: getAuthHeaders(),
         });
         const data = await response.json();
         if (!response.ok) throw new Error(data.message || 'Gagal memuat data denda.');
-        return data.data;
+        
+        return {
+            data: data.data.data as ManualPenalty[],
+            total: data.data.total as number
+        };
     },
 
-    async createPenalty(data: { user_id: string; amount: number; reason: string; date: string }) {
+    async getPenaltyYears() {
+        const response = await fetch(`${API_URL}/admin/penalties/years`, {
+            method: 'GET',
+            headers: getAuthHeaders(),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.message || 'Gagal memuat daftar tahun.');
+        return data.data as string[];
+    },
+
+    async createManualPenalty(data: { user_id: string; amount: number; title: string; date: string }) {
         const response = await fetch(`${API_URL}/admin/penalties`, {
             method: 'POST',
             headers: getAuthHeaders(),
@@ -142,7 +201,29 @@ export const settingService = {
         return data;
     },
 
-    // 5. Upload Method
+    // 5. Attendance Settings
+    async getAttendanceSettings() {
+        const response = await fetch(`${API_URL}/admin/attendance-settings`, {
+            method: 'GET',
+            headers: getAuthHeaders(),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.message || 'Gagal memuat pengaturan absensi.');
+        return data.data as AttendanceSettings;
+    },
+
+    async updateAttendanceSettings(data: Partial<AttendanceSettings>) {
+        const response = await fetch(`${API_URL}/admin/attendance-settings`, {
+            method: 'PUT', // Using PUT for updates
+            headers: getAuthHeaders(),
+            body: JSON.stringify(data),
+        });
+        const resData = await response.json();
+        if (!response.ok) throw new Error(resData.message || 'Gagal memperbarui pengaturan.');
+        return resData.data;
+    },
+
+    // 6. Common Upload Method
     async uploadFile(file: File) {
         const token = localStorage.getItem('token');
         const formData = new FormData();

@@ -61,9 +61,12 @@ class _AppContent extends StatelessWidget {
                 children: [
                   if (child != null) child,
                   if (auth.isSessionLocked)
-                    const Positioned.fill(
-                      child: Material(
-                        child: features_login.LoginScreen(pinOnlyMode: true),
+                    Positioned.fill(
+                      child: PopScope(
+                        canPop: false,
+                        child: Material(
+                          child: features_login.LoginScreen(pinOnlyMode: true),
+                        ),
                       ),
                     ),
                 ],

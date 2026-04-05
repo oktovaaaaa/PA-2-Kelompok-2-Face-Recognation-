@@ -510,7 +510,8 @@ class _EmployeeAttendanceTabState extends State<EmployeeAttendanceTab> {
                                 'Jam: ${settings['check_in_start']} - ${settings['check_in_end']} (In)\n'
                                 'Jam: ${settings['check_out_start']} - ${settings['check_out_end']} (Out)\n'
                                 'Sanksi: Rp ${CurrencyInputFormatter.formatNumber((settings['alpha_penalty'] as num?)?.toInt() ?? 0)} (Alpha) / '
-                                'Rp ${CurrencyInputFormatter.formatNumber((settings['late_penalty'] as num?)?.toInt() ?? 0)} (Terlambat)',
+                                'Rp ${CurrencyInputFormatter.formatNumber((settings['late_penalty'] as num?)?.toInt() ?? 0)} (Terlambat) / '
+                                'Rp ${CurrencyInputFormatter.formatNumber((settings['early_leave_penalty'] as num?)?.toInt() ?? 0)} (Pulang Awal)',
                                 style: const TextStyle(fontSize: 12, color: Color(0xFF64748B), height: 1.5),
                               ),
                             ),
